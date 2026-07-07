@@ -39,6 +39,20 @@ AI_SRC_DIR	=	src/ai
 AI_MAIN		=	$(AI_SRC_DIR)/main.py
 
 # ---------------------------------------------------------------------------
+# Tests (Criterion)
+# ---------------------------------------------------------------------------
+TESTS_NAME	=	tests_server
+
+TESTS_SRC_DIR	=	tests/server
+TESTS_SRC	=	$(wildcard $(TESTS_SRC_DIR)/*.c)
+TESTS_PARSER_SRC=	$(filter-out $(SERVER_SRC_DIR)/main.c, $(SERVER_SRC))
+
+# -I. et -Iinclude : nécessaires tant que src/server mélange
+# #include <server/server.h> et #include <include/server/server.h>
+TESTS_CFLAGS	=	-Wall -Wextra -I. -Iinclude
+TESTS_LDLIBS	=	-lcriterion
+
+# ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
 all:	$(SERVER_NAME) $(GUI_NAME) $(AI_NAME)
@@ -53,12 +67,18 @@ $(AI_NAME):	$(AI_MAIN)
 	cp $(AI_MAIN) $(AI_NAME)
 	chmod +x $(AI_NAME)
 
+$(TESTS_NAME):	$(TESTS_PARSER_SRC) $(TESTS_SRC)
+	$(CC) $(TESTS_CFLAGS) -o $(TESTS_NAME) $(TESTS_PARSER_SRC) $(TESTS_SRC) $(TESTS_LDLIBS)
+
+tests_run:	$(TESTS_NAME)
+	./$(TESTS_NAME)
+
 clean:
 	rm -f $(SERVER_OBJ) $(GUI_OBJ)
 
 fclean:	clean
-	rm -f $(SERVER_NAME) $(GUI_NAME) $(AI_NAME)
+	rm -f $(SERVER_NAME) $(GUI_NAME) $(AI_NAME) $(TESTS_NAME)
 
 re:	fclean all
 
-.PHONY:	all clean fclean re zappy_server zappy_gui zappy_ai
+.PHONY:	all clean fclean re tests_run zappy_server zappy_gui zappy_ai
