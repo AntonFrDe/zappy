@@ -31,6 +31,32 @@ def send_command_to_server(server_connection, command):
     server_connection.sendall((command + "\n").encode())
     return receive_response_from_server(server_connection)
 
+def parse_inventory_response(response):
+
+    inventory = {}
+    items = response.strip("[]").split(",")
+
+    for item in items:
+        parts = item.split()
+
+        if len(parts) == 2 and parts[1].isdigit():
+            inventory[parts[0]] = int(parts[1])
+
+    return inventory
+
+def keep_player_alive(server_connection):
+
+    inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+    if inventory.get("food", 0) > 5:
+        return False
+    look = send_command_to_server(server_connection, "Look")
+    tile = look.strip("[]").split(",")[0].split()
+    if "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return True
+    send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -43,6 +69,8 @@ def main():
         receive_response_from_server(server_connection)
 
         while True:
+            if keep_player_alive(server_connection):
+                continue
             look = send_command_to_server(server_connection, "Look")
             tile = look.strip("[]").split(",")[0].split()
 
