@@ -30,13 +30,4 @@
         uint16_t freq;
     } flags_t;
 
-
-// ERROR RETURN VALUE
-    typedef struct {
-        bool error;
-        void *value;
-        int nbPointer;
-        char error_msg[256];
-    } retour_t;
-
 #endif // struct
