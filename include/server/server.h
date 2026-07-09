@@ -2,6 +2,7 @@
     #define SERVER_H_
 #include <unistd.h>
     #include "struct.h"
+    #include "error.h"
     #include <stdlib.h>
     #include <stdio.h>
 

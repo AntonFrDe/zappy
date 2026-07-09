@@ -11,6 +11,7 @@
 /*                                                        /                   */
 /* ************************************************************************** */
 
+#include "../../include/server/server.h"
 #include <server/server.h>
 
 int main(int argc, char **argv)
@@ -18,6 +19,8 @@ int main(int argc, char **argv)
     retour_t rt = parser(argc, argv);
 
     if (rt.error) {
+        fprintf(stderr, "%s\n", rt.error_msg);
+        free_error(rt);
         free_rt(rt);
         return 84;
     }
