@@ -12,7 +12,8 @@
 /* ************************************************************************** */
 
 
-#include <include/server/server.h>
+#include "../../include/server/server.h"
+#include <errno.h>
 
 static void print_usage(void)
 {
@@ -29,6 +30,38 @@ static bool has_help_flag(int argc, char **argv)
     return false;
 }
 
+//check long number
+static bool parse_long_nb(const char *str, long min, long max, long *out)
+{
+    char *end;
+    long val;
+
+    if (str == NULL || *str == '\0')
+        return false;
+    errno = 0;
+    val = strtol(str, &end, 10);
+    if (*end != '\0' || errno == ERANGE || val < min || val > max)
+        return false;
+    *out = val;
+    return true;
+}
+
+// la mm en unsigned
+static bool parse_u64_nb(const char *str, uint64_t *out)
+{
+    char *end;
+    unsigned long long val;
+
+    if (str == NULL || *str == '\0' || str[0] == '-')
+        return false;
+    errno = 0;
+    val = strtoull(str, &end, 10);
+    if (*end != '\0' || errno == ERANGE || val < 1)
+        return false;
+    *out = (uint64_t)val;
+    return true;
+}
+
 retour_t parser(int argc, char **argv)
 {
     int opt;
@@ -39,6 +72,7 @@ retour_t parser(int argc, char **argv)
     bool has_height = false;
     bool has_teams = false;
     bool has_clients = false;
+    long lval;
 
     if (has_help_flag(argc, argv)) {
         print_usage();
@@ -46,65 +80,42 @@ retour_t parser(int argc, char **argv)
     }
     flags.freq = 100;
     flags.teams = malloc(sizeof(char *) * (size_t)argc);
-    if (flags.teams == NULL) {
-        snprintf(rt.error_msg, sizeof(rt.error_msg), "Memory allocation failed");
-        rt.error = true;
-        return rt;
-    }
+    if (flags.teams == NULL)
+        return fail("Memory allocation failed", NULL);
     while ((opt = getopt(argc, argv, "p:x:y:n:c:f:")) != -1) {
         switch (opt) {
 
         // PORT
         case 'p': {
-            int p = atoi(optarg);
-            if (p < 1 || p > 65535) {
-                snprintf(rt.error_msg, sizeof(rt.error_msg), "Port given value isn't a valid port");
-                rt.error = true;
-                return rt;
-            }
-            flags.port = p;
+            if (!parse_long_nb(optarg, 1, 65535, &lval))
+                return fail("Port given value isn't a valid port", flags.teams);
+            flags.port = (int)lval;
             has_port = true;
             break;
         }
         // MAP WIDTH
         case 'x': {
-            int x = atoi(optarg);
-            if (x < 1) {
-                snprintf(rt.error_msg, sizeof(rt.error_msg), "Map width given value is not a unsigned integer");
-                rt.error = true;
-                return rt;
-            }
-            flags.width = (uint64_t)x;
+            if (!parse_u64_nb(optarg, &flags.width))
+                return fail("Map width given value is not a unsigned integer", flags.teams);
             has_width = true;
             break;
         }
         // MAP HEIGHT
         case 'y': {
-            int y = atoi(optarg);
-            if (y < 1) {
-                snprintf(rt.error_msg, sizeof(rt.error_msg), "Map height given value is not a unsigned integer");
-                rt.error = true;
-                return rt;
-            }
-            flags.height = (uint64_t)y;
+            if (!parse_u64_nb(optarg, &flags.height))
+                return fail("Map height given value is not a unsigned integer", flags.teams);
             has_height = true;
             break;
         }
         // TEAM NAMES
         case 'n': {
-            if (strcmp(optarg, "GRAPHIC") == 0) {
-                snprintf(rt.error_msg, sizeof(rt.error_msg), "Team name 'GRAPHIC' is reserved for the GUI");
-                rt.error = true;
-                return rt;
-            }
+            if (strcmp(optarg, "GRAPHIC") == 0)
+                return fail("Team name 'GRAPHIC' is reserved for the GUI", flags.teams);
             flags.teams[flags.teams_nb++] = optarg;
-            
+
             while (optind < argc && argv[optind][0] != '-') {
-                if (strcmp(argv[optind], "GRAPHIC") == 0) {
-                    snprintf(rt.error_msg, sizeof(rt.error_msg), "Team name 'GRAPHIC' is reserved for the GUI");
-                    rt.error = true;
-                    return rt;
-                }
+                if (strcmp(argv[optind], "GRAPHIC") == 0)
+                    return fail("Team name 'GRAPHIC' is reserved for the GUI", flags.teams);
                 flags.teams[flags.teams_nb++] = argv[optind];
                 optind++;
             }
@@ -113,44 +124,29 @@ retour_t parser(int argc, char **argv)
         }
         // CLIENTS PER TEAM
         case 'c': {
-            int c = atoi(optarg);
-            if (c < 1 || c > UINT16_MAX) {
-                snprintf(rt.error_msg, sizeof(rt.error_msg), "clientsNb given value is not a valid unsigned integer");
-                rt.error = true;
-                return rt;
-            }
-            flags.clients_nb = (uint16_t)c;
+            if (!parse_long_nb(optarg, 1, UINT16_MAX, &lval))
+                return fail("clientsNb given value is not a valid unsigned integer", flags.teams);
+            flags.clients_nb = (uint16_t)lval;
             has_clients = true;
             break;
         }
-        // FREQUENCY (optionnel, defaut 100 deja pose avant la boucle)
+        // FREQUENCY 
         case 'f': {
-            int f = atoi(optarg);
-            if (f < 1 || f > UINT16_MAX) {
-                snprintf(rt.error_msg, sizeof(rt.error_msg), "freq given value is not a valid unsigned integer");
-                rt.error = true;
-                return rt;
-            }
-            flags.freq = (uint16_t)f;
+            if (!parse_long_nb(optarg, 1, UINT16_MAX, &lval))
+                return fail("freq given value is not a valid unsigned integer", flags.teams);
+            flags.freq = (uint16_t)lval;
             break;
         }
         default:
-            snprintf(rt.error_msg, sizeof(rt.error_msg), "Unknown option or missing value for a flag");
-            rt.error = true;
-            return rt;
+            return fail("Unknown option or missing value for a flag", flags.teams);
         }
     }
-    if (!has_port || !has_width || !has_height || !has_teams || !has_clients) {
-        snprintf(rt.error_msg, sizeof(rt.error_msg), "Missing mandatory argument (-p, -x, -y, -n or -c)");
-        rt.error = true;
-        return rt;
-    }
+    if (!has_port || !has_width || !has_height || !has_teams || !has_clients)
+        return fail("Missing mandatory argument (-p, -x, -y, -n or -c)", flags.teams);
+
     flags_t *result = malloc(sizeof(flags_t));
-    if (result == NULL) {
-        snprintf(rt.error_msg, sizeof(rt.error_msg), "Memory allocation failed");
-        rt.error = true;
-        return rt;
-    }
+    if (result == NULL)
+        return fail("Memory allocation failed", flags.teams);
     *result = flags;
     rt.error = false;
     rt.value = result;

@@ -11,14 +11,15 @@
 /*                                                        /                   */
 /* ************************************************************************** */
 
-#include <server/server.h>
+#include "../../include/server/server.h"
 
 int main(int argc, char **argv)
 {
     retour_t rt = parser(argc, argv);
 
     if (rt.error) {
-        free_rt(rt);
+        fprintf(stderr, "%s\n", rt.error_msg);
+        free_error(rt);
         return 84;
     }
     return 0;
