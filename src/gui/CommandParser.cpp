@@ -162,11 +162,11 @@ void CommandParser::handlePpo(std::istringstream &args)
 
 void CommandParser::handlePlv(std::istringstream &args)
 {
-    std::string id;
+    std::string idToken;
     int level;
 
-    args >> id >> level;
-    int id = parseId(id);
+    args >> idToken >> level;
+    int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (!player)
         return;
@@ -176,11 +176,11 @@ void CommandParser::handlePlv(std::istringstream &args)
 
 void CommandParser::handlePin(std::istringstream &args)
 {
-    std::string id;
+    std::string idToken;
     int x, y;
 
-    args >> id >> x >> y;
-    int id = parseId(id);
+    args >> idToken >> x >> y;
+    int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (!player)
         return;
@@ -193,19 +193,17 @@ void CommandParser::handlePin(std::istringstream &args)
 
 void CommandParser::handlePex(std::istringstream &args)
 {
-    std::string id;
-    args >> id;
-    int id = parseId(id);
+    std::string idToken;
+    args >> idToken;
+    int id = parseId(idToken);
     std::cout << "[parser] joueur #" << id << " expulse" << std::endl;
-    // L'expulsion n'affecte pas la position/vie du joueur en soi ; a traiter
-    // visuellement (animation) a l'etape rendu.
 }
 
 void CommandParser::handlePbc(std::istringstream &args)
 {
-    std::string id;
-    args >> id;
-    int id = parseId(id);
+    std::string idToken;
+    args >> idToken;
+    int id = parseId(idToken);
 
     std::string message;
     std::getline(args, message);
@@ -214,8 +212,6 @@ void CommandParser::handlePbc(std::istringstream &args)
 
     std::cout << "[parser] broadcast de #" << id << ": " << message << std::endl;
 }
-
-// ---- Incantations ----------------------------------------------------------------
 
 void CommandParser::handlePic(std::istringstream &args)
 {
@@ -228,12 +224,12 @@ void CommandParser::handlePic(std::istringstream &args)
     incantation.level = level;
     incantation.active = true;
 
-    std::string id;
-    while (args >> id)
+    std::string idToken;
+    while (args >> idToken)
     {
-        int id = parseId(id);
-        if (id >= 0)
-            incantation.playerIds.push_back(id);
+        int pid = parseId(idToken);
+        if (pid >= 0)
+            incantation.playerIds.push_back(pid);
     }
 
     _state.incantations.push_back(incantation);
@@ -264,11 +260,11 @@ void CommandParser::handlePfk(std::istringstream &args)
 
 void CommandParser::handlePdr(std::istringstream &args)
 {
-    std::string id;
+    std::string idToken;
     int resourceIndex;
-    args >> id >> resourceIndex;
+    args >> idToken >> resourceIndex;
 
-    int id = parseId(id);
+    int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player && resourceIndex >= 0 && resourceIndex < RESOURCE_COUNT)
     {
@@ -281,11 +277,11 @@ void CommandParser::handlePdr(std::istringstream &args)
 
 void CommandParser::handlePgt(std::istringstream &args)
 {
-    std::string id;
+    std::string idToken;
     int resourceIndex;
-    args >> id >> resourceIndex;
+    args >> idToken >> resourceIndex;
 
-    int id = parseId(id);
+    int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player && resourceIndex >= 0 && resourceIndex < RESOURCE_COUNT)
     {
@@ -301,9 +297,9 @@ void CommandParser::handlePgt(std::istringstream &args)
 
 void CommandParser::handlePdi(std::istringstream &args)
 {
-    std::string id;
-    args >> id;
-    int id = parseId(id);
+    std::string idToken;
+    args >> idToken;
+    int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player)
         player->alive = false;
@@ -313,12 +309,12 @@ void CommandParser::handlePdi(std::istringstream &args)
 
 void CommandParser::handleEnw(std::istringstream &args)
 {
-    std::string eggId, playerId;
+    std::string eggIdToken, playerIdToken;
     int x, y;
 
-    args >> eggId >> playerId >> x >> y;
-    int eggId = parseId(eggId);
-    int playerId = parseId(playerId);
+    args >> eggIdToken >> playerIdToken >> x >> y;
+    int eggId = parseId(eggIdToken);
+    int playerId = parseId(playerIdToken);
     if (eggId < 0)
         return;
 
