@@ -57,6 +57,20 @@ def keep_player_alive(server_connection):
     send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
     return True
 
+def try_first_elevation(server_connection):
+
+    inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+
+    if inventory.get("linemate", 0) < 1:
+        return False
+    if send_command_to_server(server_connection, "Set linemate") != "ok":
+        return False
+    answer = send_command_to_server(server_connection, "Incantation")
+    if answer == "Elevation underway":
+        receive_response_from_server(server_connection)
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -70,6 +84,8 @@ def main():
 
         while True:
             if keep_player_alive(server_connection):
+                continue
+            if try_first_elevation(server_connection):
                 continue
             look = send_command_to_server(server_connection, "Look")
             tile = look.strip("[]").split(",")[0].split()
