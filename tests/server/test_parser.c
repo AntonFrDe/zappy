@@ -7,7 +7,6 @@
 #include <criterion/redirect.h>
 #include <server/server.h>
 
-/* parser() is not declared in any header on this branch (see include/server/server.h) */
 retour_t parser(int argc, char **argv);
 
 static void free_flags(retour_t rt)
@@ -417,6 +416,117 @@ Test(parser, missing_value_at_end_for_freq_fails, .init = cr_redirect_stderr)
     char *argv[] = {
         "zappy_server", "-p", "4242", "-x", "10", "-y", "10",
         "-n", "team1", "-c", "3", "-f"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, missing_value_at_end_for_width_fails, .init = cr_redirect_stderr)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-y", "10",
+        "-n", "team1", "-c", "3", "-x"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, missing_value_at_end_for_teams_fails, .init = cr_redirect_stderr)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-x", "10", "-y", "10",
+        "-c", "3", "-n"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+/* ---- Aucun argument / valeurs negatives ---- */
+
+Test(parser, no_arguments_at_all_fails)
+{
+    char *argv[] = { "zappy_server" };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, port_negative_fails)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "-1", "-x", "10", "-y", "10",
+        "-n", "team1", "-c", "3"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, width_negative_fails)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-x", "-5", "-y", "10",
+        "-n", "team1", "-c", "3"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, height_negative_fails)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-x", "10", "-y", "-3",
+        "-n", "team1", "-c", "3"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, clients_negative_fails)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-x", "10", "-y", "10",
+        "-n", "team1", "-c", "-1"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    retour_t rt;
+
+    optind = 1;
+    rt = parser(argc, argv);
+    cr_assert_eq(rt.error, true);
+}
+
+Test(parser, freq_negative_fails)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-x", "10", "-y", "10",
+        "-n", "team1", "-c", "3", "-f", "-5"
     };
     int argc = sizeof(argv) / sizeof(argv[0]);
     retour_t rt;
