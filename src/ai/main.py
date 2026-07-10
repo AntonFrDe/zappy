@@ -3,6 +3,8 @@ import socket
 import sys
 from random import choice
 
+USEFUL_RESOURCES = ("food", "linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame")
+
 def read_and_get_arguments(argument_type, default=None):
 
     if argument_type in sys.argv:
@@ -57,6 +59,28 @@ def keep_player_alive(server_connection):
     send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
     return True
 
+def take_visible_resource(server_connection, tile):
+
+    for resource in USEFUL_RESOURCES:
+        if resource in tile:
+            send_command_to_server(server_connection, "Take " + resource)
+            return True
+    return False
+
+def try_first_elevation(server_connection):
+
+    inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+
+    if inventory.get("linemate", 0) < 1:
+        return False
+    if send_command_to_server(server_connection, "Set linemate") != "ok":
+        return False
+    answer = send_command_to_server(server_connection, "Incantation")
+    if answer == "Elevation underway":
+        receive_response_from_server(server_connection)
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -71,14 +95,12 @@ def main():
         while True:
             if keep_player_alive(server_connection):
                 continue
+            if try_first_elevation(server_connection):
+                continue
             look = send_command_to_server(server_connection, "Look")
             tile = look.strip("[]").split(",")[0].split()
 
-            if "food" in tile:
-                send_command_to_server(server_connection, "Take food")
-            elif "linemate" in tile:
-                send_command_to_server(server_connection, "Take linemate")
-            else:
+            if not take_visible_resource(server_connection, tile):
                 send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
 
 if __name__ == "__main__":
