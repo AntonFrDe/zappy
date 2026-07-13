@@ -57,6 +57,19 @@ def keep_player_alive(server_connection):
     send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
     return True
 
+def collect_visible_resource(server_connection, tile):
+    for resource in [
+        "linemate",
+        "deraumere",
+        "sibur",
+        "mendiane",
+        "phiras", "thystame",
+    ]:
+        if resource in tile:
+            send_command_to_server(server_connection, "Take " + resource)
+            return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -76,10 +89,8 @@ def main():
 
             if "food" in tile:
                 send_command_to_server(server_connection, "Take food")
-            elif "linemate" in tile:
-                send_command_to_server(server_connection, "Take linemate")
-            elif "deraumere" in tile:
-                send_command_to_server(server_connection, "Take deraumere")
+            elif collect_visible_resource(server_connection, tile):
+                continue
             else:
                 send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
 
