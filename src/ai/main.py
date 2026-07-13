@@ -78,6 +78,8 @@ def main():
                 send_command_to_server(server_connection, "Take food")
             elif "linemate" in tile:
                 send_command_to_server(server_connection, "Take linemate")
+            elif "deraumere" in tile:
+                send_command_to_server(server_connection, "Take deraumere")
             else:
                 send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
 
