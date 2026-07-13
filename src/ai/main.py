@@ -70,6 +70,20 @@ def collect_visible_resource(server_connection, tile):
             return True
     return False
 
+def choose_exploration_command(tile):
+    if "player" in tile:
+        return "Right"
+    if "egg" in tile:
+        return "Left"
+    if "food" in tile:
+        return "Forward"
+    if "linemate" in tile:
+        return "Forward"
+    if "deraumere" in tile:
+        return "Forward"
+    if len(tile) == 0:
+        return choice(["Left", "Right"])
+    return choice(["Forward", "Left", "Right"])
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -92,7 +106,7 @@ def main():
             elif collect_visible_resource(server_connection, tile):
                 continue
             else:
-                send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
+                send_command_to_server(server_connection, choose_exploration_command(tile))
 
 if __name__ == "__main__":
     main()
