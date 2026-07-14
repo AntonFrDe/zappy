@@ -47,30 +47,45 @@ def parse_inventory_response(response):
 def keep_player_alive(server_connection):
 
     inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+
     if inventory.get("food", 0) > 5:
         return False
+
     look = send_command_to_server(server_connection, "Look")
     tile = look.strip("[]").split(",")[0].split()
+
     if "food" in tile:
         send_command_to_server(server_connection, "Take food")
         return True
     send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
+
     return True
 
 def collect_visible_resource(server_connection, tile):
-    for resource in [
-        "linemate",
-        "deraumere",
+
+    for resource in ["linemate", "deraumere",
         "sibur",
         "mendiane",
-        "phiras", "thystame",
-    ]:
+        "phiras", "thystame",]:
+
         if resource in tile:
             send_command_to_server(server_connection, "Take " + resource)
             return True
+
     return False
 
+def count_visible_item(tile, item):
+
+    i = 0
+
+    for y in tile:
+        if y == item:
+            i = i + 1
+
+    return i
+
 def choose_exploration_command(tile):
+
     if "player" in tile:
         return "Right"
     if "egg" in tile:
@@ -83,7 +98,21 @@ def choose_exploration_command(tile):
         return "Forward"
     if len(tile) == 0:
         return choice(["Left", "Right"])
+
     return choice(["Forward", "Left", "Right"])
+
+def try_first_incantation(server_connection, inventory, tile):
+    if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
+        return False
+    if "linemate" not in tile:
+        send_command_to_server(server_connection, "Set linemate")
+    answer = send_command_to_server(server_connection, "Incantation")
+
+    if answer == "Elevation underway":
+        receive_response_from_server(server_connection)
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -101,6 +130,17 @@ def main():
             look = send_command_to_server(server_connection, "Look")
             tile = look.strip("[]").split(",")[0].split()
 
+            inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+            if try_first_incantation(server_connection, inventory, tile):
+                continue
+            food_count = count_visible_item(tile, "food")
+            if food_count > 1:
+                send_command_to_server(server_connection, "Take food")
+                continue
+            player_count = count_visible_item(tile, "player")
+            if player_count > 0:
+                send_command_to_server(server_connection, "Right")
+                continue
             if "food" in tile:
                 send_command_to_server(server_connection, "Take food")
             elif collect_visible_resource(server_connection, tile):
