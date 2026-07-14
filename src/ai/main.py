@@ -113,6 +113,18 @@ def try_first_incantation(server_connection, inventory, tile):
         return True
     return False
 
+def should_take_food(tile, inventory):
+    food_count = count_visible_item(tile, "food")
+    if food_count == 0:
+        return False
+    if inventory.get("food", 0) < 10:
+        return True
+    if food_count > 2:
+        return True
+    if len(tile) == food_count:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -131,6 +143,9 @@ def main():
             tile = look.strip("[]").split(",")[0].split()
 
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+            if should_take_food(tile, inventory):
+                send_command_to_server(server_connection, "Take food")
+                continue
             if try_first_incantation(server_connection, inventory, tile):
                 continue
             food_count = count_visible_item(tile, "food")
