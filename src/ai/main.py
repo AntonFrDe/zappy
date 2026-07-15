@@ -125,6 +125,13 @@ def should_take_food(tile, inventory):
         return True
     return False
 
+def should_collect_stone(tile):
+    if count_visible_item(tile, "linemate") > 0:
+        return True
+    if count_visible_item(tile, "deraumere") > 0:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -151,6 +158,9 @@ def main():
             food_count = count_visible_item(tile, "food")
             if food_count > 1:
                 send_command_to_server(server_connection, "Take food")
+                continue
+            if should_collect_stone(tile):
+                collect_visible_resource(server_connection, tile)
                 continue
             player_count = count_visible_item(tile, "player")
             if player_count > 0:
