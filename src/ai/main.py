@@ -159,6 +159,15 @@ def turn_on_empty_tile(server_connection, tile):
     send_command_to_server(server_connection, "Right")
     return True
 
+def should_skip_extra_stone(inventory, tile):
+    if inventory.get("linemate", 0) > 1 and "linemate" in tile:
+        return True
+    if inventory.get("deraumere", 0) > 1 and "deraumere" in tile:
+        return True
+    if inventory.get("sibur", 0) > 1 and "sibur" in tile:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -190,6 +199,9 @@ def main():
                 send_command_to_server(server_connection, "Look")
                 continue
             if try_first_incantation(server_connection, inventory, tile):
+                continue
+            if should_skip_extra_stone(inventory, tile):
+                send_command_to_server(server_connection, "Forward")
                 continue
             food_count = count_visible_item(tile, "food")
             if food_count > 1:
