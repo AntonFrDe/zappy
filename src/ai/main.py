@@ -153,6 +153,12 @@ def move_when_food_is_low(server_connection, inventory, tile):
     send_command_to_server(server_connection, "Forward")
     return True
 
+def turn_on_empty_tile(server_connection, tile):
+    if len(tile) != 0:
+        return False
+    send_command_to_server(server_connection, "Right")
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -173,6 +179,8 @@ def main():
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
             if len(tile) == 0:
                 send_command_to_server(server_connection, "Look")
+            if turn_on_empty_tile(server_connection, tile):
+                continue
             if move_when_food_is_low(server_connection, inventory, tile):
                 continue
             if should_take_food(tile, inventory):
