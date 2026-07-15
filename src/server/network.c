@@ -1,0 +1,195 @@
+#include "../../include/server/network.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdio.h>
+
+static int create_listen_socket(int port)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    struct sockaddr_in addr = {0};
+
+    if (fd < 0)
+        return -1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons((uint16_t)port);
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
+    }
+    if (listen(fd, SERVER_BACKLOG) < 0) {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+int server_init(server_t *server, flags_t *cfg)
+{
+    memset(server, 0, sizeof(*server));
+    server->cfg = cfg;
+    server->listen_fd = create_listen_socket(cfg->port);
+    if (server->listen_fd < 0)
+        return -1;
+    server->slots_remaining = malloc(sizeof(uint16_t) * cfg->teams_nb);
+    if (server->slots_remaining == NULL) {
+        close(server->listen_fd);
+        return -1;
+    }
+    for (int i = 0; i < cfg->teams_nb; i++)
+        server->slots_remaining[i] = cfg->clients_nb;
+    server->fds[0].fd = server->listen_fd;
+    server->fds[0].events = POLLIN;
+    server->nfds = 1;
+    return 0;
+}
+
+void server_destroy(server_t *server)
+{
+    for (int i = 1; i < server->nfds; i++)
+        client_destroy(server->clients[i]);
+    if (server->listen_fd >= 0)
+        close(server->listen_fd);
+    free(server->slots_remaining);
+}
+
+static void accept_new_client(server_t *server)
+{
+    int fd = accept(server->listen_fd, NULL, NULL);
+    client_t *client;
+
+    if (fd < 0)
+        return;
+    if (server->nfds > SERVER_MAX_CLIENTS) {
+        close(fd);
+        return;
+    }
+    client = client_create(fd);
+    if (client == NULL) {
+        close(fd);
+        return;
+    }
+    client_queue_send(client, "WELCOME\n");
+    server->clients[server->nfds] = client;
+    server->fds[server->nfds].fd = fd;
+    server->fds[server->nfds].events = POLLIN;
+    server->nfds++;
+}
+
+static void disconnect_client(server_t *server, int team_i)
+{
+    client_destroy(server->clients[team_i]);
+    for (int i = team_i; i < server->nfds - 1; i++) {
+        server->clients[i] = server->clients[i + 1];
+        server->fds[i] = server->fds[i + 1];
+    }
+    server->nfds--;
+}
+
+static int find_team_index(server_t *server, const char *name)
+{
+    for (int i = 0; i < server->cfg->teams_nb; i++)
+        if (strcmp(server->cfg->teams[i], name) == 0)
+            return i;
+    return -1;
+}
+
+static void send_map_size(server_t *server, client_t *client)
+{
+    char msg[64];
+
+    snprintf(msg, sizeof(msg), "%llu %llu\n",
+        (unsigned long long)server->cfg->width,
+        (unsigned long long)server->cfg->height);
+    client_queue_send(client, msg);
+}
+
+static void handle_team_name(server_t *server, client_t *client, const char *name)
+{
+    char msg[64];
+    //Timmyy !!
+    int team_i;
+
+    if (strcmp(name, "GRAPHIC") == 0) {
+        client->is_graphic = true;
+        client->handshake_done = true;
+        send_map_size(server, client);
+        return;
+    }
+    team_i = find_team_index(server, name);
+    if (team_i < 0 || server->slots_remaining[team_i] == 0) {
+        client_queue_send(client, "ko\n");
+        return;
+    }
+    server->slots_remaining[team_i]--;
+    client->team_index = team_i;
+    client->handshake_done = true;
+    snprintf(msg, sizeof(msg), "%u\n", server->slots_remaining[team_i]);
+    client_queue_send(client, msg);
+    send_map_size(server, client);
+}
+
+static void process_client_input(server_t *server, int team_i)
+{
+    client_t *client = server->clients[team_i];
+    char line[512];
+
+    while (client_extract_line(client, line, sizeof(line))) {
+        if (!client->handshake_done)
+            handle_team_name(server, client, line);
+        else
+            client_push_cmd(client, line);
+    }
+}
+
+static void update_poll_events(server_t *server)
+{
+    for (int i = 1; i < server->nfds; i++)
+        server->fds[i].events = server->clients[i]->send_len
+            > server->clients[i]->send_sent ? (POLLIN | POLLOUT) : POLLIN;
+}
+
+// 1 si deco (tableau decale), 0 sinon
+static int handle_client_events(server_t *server, int i)
+{
+    int n;
+
+    if (server->fds[i].revents & POLLIN) {
+        n = client_read(server->clients[i]);
+        if (n <= 0) {
+            disconnect_client(server, i);
+            return 1;
+        }
+        process_client_input(server, i);
+    }
+    if (server->fds[i].revents & POLLOUT)
+        client_flush_send(server->clients[i]);
+    return 0;
+}
+
+// Boucle server
+int server_run(server_t *server)
+{
+    int ready;
+
+    while (true) {
+        update_poll_events(server);
+        ready = poll(server->fds, (nfds_t)server->nfds, 100);
+
+        if (ready < 0)
+            return -1;
+        
+        if (server->fds[0].revents & POLLIN)
+            accept_new_client(server);
+        
+        for (int i = 1; i < server->nfds; i++)
+            if (handle_client_events(server, i))
+                i--;
+    }
+    return 0;
+}
