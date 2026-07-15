@@ -144,6 +144,15 @@ def should_wait_before_incantation(inventory):
         return True
     return False
 
+def move_when_food_is_low(server_connection, inventory, tile):
+    if inventory.get("food", 0) >= 3:
+        return False
+    if "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return True
+    send_command_to_server(server_connection, "Forward")
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -162,6 +171,10 @@ def main():
             tile = look.strip("[]").split(",")[0].split()
 
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+            if len(tile) == 0:
+                send_command_to_server(server_connection, "Look")
+            if move_when_food_is_low(server_connection, inventory, tile):
+                continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
                 continue
