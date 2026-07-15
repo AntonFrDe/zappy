@@ -132,6 +132,18 @@ def should_collect_stone(tile):
         return True
     return False
 
+def should_wait_before_incantation(inventory):
+    food, linemate = inventory.get("food", 0), inventory.get("linemate", 0)
+    if food == 0:
+        return True
+    if food < 2:
+        return True
+    if linemate < 1:
+        return True
+    if food < 4 and linemate == 0:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -152,6 +164,9 @@ def main():
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
+                continue
+            if should_wait_before_incantation(inventory):
+                send_command_to_server(server_connection, "Look")
                 continue
             if try_first_incantation(server_connection, inventory, tile):
                 continue
