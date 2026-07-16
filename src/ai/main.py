@@ -184,6 +184,16 @@ def should_turn_near_players(tile):
 
     return False
 
+def should_collect_rare_stone(tile):
+    if "sibur" in tile:
+        return True
+
+    if "mendiane" in tile:
+        return True
+    if "phiras" in tile or "thystame" in tile:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -226,6 +236,9 @@ def main():
                 send_command_to_server(server_connection, "Take food")
                 continue
             if should_collect_stone(tile):
+                collect_visible_resource(server_connection, tile)
+                continue
+            if should_collect_rare_stone(tile):
                 collect_visible_resource(server_connection, tile)
                 continue
             if should_turn_near_players(tile):
