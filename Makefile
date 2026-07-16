@@ -50,7 +50,7 @@ TESTS_PARSER_SRC=	$(filter-out $(SERVER_SRC_DIR)/main.c, $(SERVER_SRC))
 # -I. et -Iinclude : nécessaires tant que src/server mélange
 # #include <server/server.h> et #include <include/server/server.h>
 TESTS_CFLAGS	=	-Wall -Wextra -I. -Iinclude
-TESTS_LDLIBS	=	-lcriterion
+TESTS_LDLIBS	=	-lcriterion -lpthread
 
 # ---------------------------------------------------------------------------
 # Rules
