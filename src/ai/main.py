@@ -178,6 +178,12 @@ def shold_move_after_look(server_connection, tile):
     send_command_to_server(server_connection, "Forward")
     return True
 
+def should_turn_near_players(tile):
+    if count_visible_item(tile, "player") > 1:
+        return True
+
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -221,6 +227,9 @@ def main():
                 continue
             if should_collect_stone(tile):
                 collect_visible_resource(server_connection, tile)
+                continue
+            if should_turn_near_players(tile):
+                send_command_to_server(server_connection, "Left")
                 continue
             player_count = count_visible_item(tile, "player")
             if player_count > 0:
