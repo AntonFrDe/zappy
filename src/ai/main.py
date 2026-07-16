@@ -168,6 +168,16 @@ def should_skip_extra_stone(inventory, tile):
         return True
     return False
 
+def shold_move_after_look(server_connection, tile):
+
+    smal_tile = len(tile) < 2
+
+    if "food" in tile or should_collect_stone(tile) or not smal_tile:
+        return False
+
+    send_command_to_server(server_connection, "Forward")
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -202,6 +212,8 @@ def main():
                 continue
             if should_skip_extra_stone(inventory, tile):
                 send_command_to_server(server_connection, "Forward")
+                continue
+            if shold_move_after_look(server_connection, tile):
                 continue
             food_count = count_visible_item(tile, "food")
             if food_count > 1:
