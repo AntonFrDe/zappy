@@ -193,6 +193,15 @@ def should_collect_rare_stone(tile):
     if "phiras" in tile or "thystame" in tile:
         return True
     return False
+def should_follow_egg(tile):
+    if "egg" in tile:
+        return True
+    return False
+
+def should_check_inventory(tile):
+    if "player" in tile and "food" not in tile:
+        return True
+    return False
 
 def main():
 
@@ -241,6 +250,11 @@ def main():
             if should_collect_rare_stone(tile):
                 collect_visible_resource(server_connection, tile)
                 continue
+            if should_follow_egg(tile):
+                send_command_to_server(server_connection, "Left")
+                continue
+            if should_check_inventory(tile):
+                send_command_to_server(server_connection, "Inventory")
             if should_turn_near_players(tile):
                 send_command_to_server(server_connection, "Left")
                 continue
