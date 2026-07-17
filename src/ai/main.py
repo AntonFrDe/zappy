@@ -231,6 +231,13 @@ def if_low_food_seek_food(server_connection, inventory, tile):
         return True
     return False
 
+def should_take_linemate_first(tile):
+    if "linemate" not in tile:
+        return False
+    if "food" in tile:
+        return False
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -256,6 +263,9 @@ def main():
             if move_when_food_is_low(server_connection, inventory, tile):
                 continue
             if if_low_food_seek_food(server_connection, inventory, tile):
+                continue
+            if should_take_linemate_first(tile):
+                send_command_to_server(server_connection, "Take linemate")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
