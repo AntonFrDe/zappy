@@ -369,7 +369,12 @@ def main():
                 send_command_to_server(server_connection, "Take food")
                 continue
             if should_wait_before_incantation(inventory):
-                send_command_to_server(server_connection, "Look")
+                if inventory.get("linemate", 0) < 1:
+                    send_command_to_server(server_connection, choose_exploration_command(tile))
+                elif inventory.get("food", 0) < 2 and "food" not in tile:
+                    send_command_to_server(server_connection, choose_exploration_command(tile))
+                else:
+                    send_command_to_server(server_connection, "Look")
                 continue
             if try_first_incantation(server_connection, inventory, tile):
                 continue
