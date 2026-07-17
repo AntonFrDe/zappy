@@ -107,9 +107,9 @@ def try_first_incantation(server_connection, inventory, tile):
         return False
     if "linemate" not in tile:
         send_command_to_server(server_connection, "Set linemate")
-    answer = send_command_to_server(server_connection, "Incantation")
+    reponse = send_command_to_server(server_connection, "Incantation")
 
-    if answer == "Elevation underway":
+    if reponse == "Elevation underway":
         receive_response_from_server(server_connection)
         return True
     return False
@@ -302,6 +302,20 @@ def should_avoid_busy_resource_tile(tile):
         return True
     return False
 
+def try_create_team_slot(server_connection, inventory):
+
+    if inventory.get("food", 0) < 8:
+        return False
+    if inventory.get("linemate", 0) < 1:
+        return False
+    reponse = send_command_to_server(server_connection, "Connect_nbr")
+    if not reponse.isdigit():
+        return False
+    if int(reponse) > 0:
+        return False
+    send_command_to_server(server_connection, "Fork")
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -325,6 +339,8 @@ def main():
             if turn_on_empty_tile(server_connection, tile):
                 continue
             if move_when_food_is_low(server_connection, inventory, tile):
+                continue
+            if try_create_team_slot(server_connection, inventory):
                 continue
             if if_low_food_seek_food(server_connection, inventory, tile):
                 continue
