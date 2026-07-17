@@ -148,6 +148,15 @@ def should_wait_before_incantation(inventory):
         return True
     return False
 
+def can_try_level_two(inventory, tile):
+    if inventory.get("food", 0) < 2:
+        return False
+    if inventory.get("linemate", 0) > 0:
+        return True
+    if "linemate" in tile:
+        return True
+    return False
+
 def move_when_food_is_low(server_connection, inventory, tile):
 
     if inventory.get("food", 0) >= 3:
@@ -392,7 +401,7 @@ def main():
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
                 continue
-            if try_first_incantation(server_connection, inventory, tile):
+            if can_try_level_two(inventory, tile) and try_first_incantation(server_connection, inventory, tile):
                 continue
             if should_skip_extra_stone(inventory, tile):
                 send_command_to_server(server_connection, "Forward")
