@@ -238,6 +238,18 @@ def should_take_linemate_first(tile):
         return False
     return True
 
+def should_take_deraumere_first(tile, inventory):
+
+    if "deraumere" not in tile:
+        return False
+    if inventory.get("deraumere", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -266,6 +278,9 @@ def main():
                 continue
             if should_take_linemate_first(tile):
                 send_command_to_server(server_connection, "Take linemate")
+                continue
+            if should_take_deraumere_first(tile, inventory):
+                send_command_to_server(server_connection, "Take deraumere")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
