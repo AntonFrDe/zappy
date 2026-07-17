@@ -275,6 +275,13 @@ def should_take_mendiane_first(tile, inventory):
     if "player" in tile:
         return False
     return True
+def should_take_phiras_first(tile, inventory):
+    if "phiras" not in tile:
+        return False
+    if inventory.get("phiras", 0) > 0:
+        return False
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -312,6 +319,9 @@ def main():
                 continue
             if should_take_mendiane_first(tile, inventory):
                 send_command_to_server(server_connection, "Take mendiane")
+                continue
+            if should_take_phiras_first(tile, inventory):
+                send_command_to_server(server_connection, "Take phiras")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
