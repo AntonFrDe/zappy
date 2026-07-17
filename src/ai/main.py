@@ -112,8 +112,9 @@ def try_first_incantation(server_connection, inventory, tile):
     reponse = send_command_to_server(server_connection, "Incantation")
 
     if reponse == "Elevation underway":
-        receive_response_from_server(server_connection)
-        return True
+        reponse = receive_response_from_server(server_connection)
+        if reponse.startswith("Current level:"):
+            return True
     return False
 
 def should_take_food(tile, inventory):
