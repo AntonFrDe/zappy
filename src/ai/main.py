@@ -102,6 +102,7 @@ def choose_exploration_command(tile):
     return choice(["Forward", "Left", "Right"])
 
 def try_first_incantation(server_connection, inventory, tile):
+
     if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
         return False
     if "linemate" not in tile:
@@ -114,6 +115,7 @@ def try_first_incantation(server_connection, inventory, tile):
     return False
 
 def should_take_food(tile, inventory):
+
     food_count = count_visible_item(tile, "food")
     if food_count == 0:
         return False
@@ -126,6 +128,7 @@ def should_take_food(tile, inventory):
     return False
 
 def should_collect_stone(tile):
+
     if count_visible_item(tile, "linemate") > 0:
         return True
     if count_visible_item(tile, "deraumere") > 0:
@@ -133,6 +136,7 @@ def should_collect_stone(tile):
     return False
 
 def should_wait_before_incantation(inventory):
+
     food, linemate = inventory.get("food", 0), inventory.get("linemate", 0)
     if food == 0:
         return True
@@ -204,9 +208,26 @@ def should_check_inventory(tile):
     return False
 
 def should_turn_on_busy_tile(tile):
+
     if len(tile) > 4:
         return True
     if count_visible_item(tile, "player") > 0 and len(tile) > 2:
+        return True
+    return False
+
+def if_low_food_seek_food(server_connection, inventory, tile):
+
+    food = inventory.get("food", 0)
+
+    if food > 8:
+        return False
+    if "food" not in tile:
+        return False
+    if count_visible_item(tile, "player") > 0:
+        send_command_to_server(server_connection, "Take food")
+        return True
+    if count_visible_item(tile, "food") > 0:
+        send_command_to_server(server_connection, "Take food")
         return True
     return False
 
@@ -233,6 +254,8 @@ def main():
             if turn_on_empty_tile(server_connection, tile):
                 continue
             if move_when_food_is_low(server_connection, inventory, tile):
+                continue
+            if if_low_food_seek_food(server_connection, inventory, tile):
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
