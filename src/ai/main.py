@@ -319,12 +319,18 @@ def try_create_team_slot(server_connection, inventory):
     send_command_to_server(server_connection, "Fork")
     return True
 
-def wait_before_incantation(server_connection, inventory, tile):
+def wait_before_incantation(server_connection, inventory, look, tile):
+    if inventory.get("food", 0) < 2 and "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return
     if inventory.get("linemate", 0) < 1 and "linemate" in tile:
         send_command_to_server(server_connection, "Take linemate")
         return
-    if inventory.get("food", 0) < 2 and "food" in tile:
-        send_command_to_server(server_connection, "Take food")
+    if inventory.get("linemate", 0) < 1 and "linemate" in look:
+        send_command_to_server(server_connection, "Forward")
+        return
+    if inventory.get("food", 0) < 2 and "food" in look:
+        send_command_to_server(server_connection, "Forward")
         return
     if inventory.get("linemate", 0) < 1 or inventory.get("food", 0) < 2:
         send_command_to_server(server_connection, choose_exploration_command(tile))
@@ -349,6 +355,9 @@ def main():
             tile = look.strip("[]").split(",")[0].split()
 
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+            if should_wait_before_incantation(inventory):
+                wait_before_incantation(server_connection, inventory, look, tile)
+                continue
             if len(tile) == 0:
                 send_command_to_server(server_connection, "Look")
             if turn_on_empty_tile(server_connection, tile):
@@ -382,9 +391,6 @@ def main():
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
-                continue
-            if should_wait_before_incantation(inventory):
-                wait_before_incantation(server_connection, inventory, tile)
                 continue
             if try_first_incantation(server_connection, inventory, tile):
                 continue
