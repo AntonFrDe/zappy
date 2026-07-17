@@ -160,6 +160,14 @@ def can_try_level_two(inventory, tile):
         return True
     return False
 
+def try_level_two_incantation(server_connection, inventory, tile):
+    if not can_try_level_two(inventory, tile):
+        return False
+    if count_visible_item(tile, "player") > 1:
+        send_command_to_server(server_connection, "Right")
+        return True
+    return try_first_incantation(server_connection, inventory, tile)
+
 def move_when_food_is_low(server_connection, inventory, tile):
 
     if inventory.get("food", 0) >= 3:
@@ -307,6 +315,7 @@ def should_take_thystame_first(tile, inventory):
     return True
 
 def should_avoid_busy_resource_tile(tile):
+
     if count_visible_item(tile, "player") == 0:
         return False
     if "linemate" in tile:
@@ -380,6 +389,8 @@ def main():
                 continue
             if if_low_food_seek_food(server_connection, inventory, tile):
                 continue
+            if try_level_two_incantation(server_connection, inventory, tile):
+                continue
             if should_avoid_busy_resource_tile(tile):
                 send_command_to_server(server_connection, "Right")
                 continue
@@ -403,8 +414,6 @@ def main():
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
-                continue
-            if can_try_level_two(inventory, tile) and try_first_incantation(server_connection, inventory, tile):
                 continue
             if should_skip_extra_stone(inventory, tile):
                 send_command_to_server(server_connection, "Forward")
