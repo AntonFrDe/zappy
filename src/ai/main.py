@@ -326,8 +326,10 @@ def should_avoid_busy_resource_tile(tile):
         return True
     return False
 
-def try_create_team_slot(server_connection, inventory):
+def try_create_team_slot(server_connection, inventory, tile):
 
+    if can_try_level_two(inventory, tile):
+        return False
     if inventory.get("food", 0) < 8:
         return False
     if inventory.get("linemate", 0) < 1:
@@ -385,11 +387,11 @@ def main():
                 continue
             if move_when_food_is_low(server_connection, inventory, tile):
                 continue
-            if try_create_team_slot(server_connection, inventory):
+            if try_level_two_incantation(server_connection, inventory, tile):
+                continue
+            if try_create_team_slot(server_connection, inventory, tile):
                 continue
             if if_low_food_seek_food(server_connection, inventory, tile):
-                continue
-            if try_level_two_incantation(server_connection, inventory, tile):
                 continue
             if should_avoid_busy_resource_tile(tile):
                 send_command_to_server(server_connection, "Right")
