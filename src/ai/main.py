@@ -149,6 +149,7 @@ def should_wait_before_incantation(inventory):
     return False
 
 def move_when_food_is_low(server_connection, inventory, tile):
+
     if inventory.get("food", 0) >= 3:
         return False
     if "food" in tile:
@@ -158,6 +159,7 @@ def move_when_food_is_low(server_connection, inventory, tile):
     return True
 
 def turn_on_empty_tile(server_connection, tile):
+
     if len(tile) != 0:
         return False
     send_command_to_server(server_connection, "Right")
@@ -183,6 +185,7 @@ def shold_move_after_look(server_connection, tile):
     return True
 
 def should_turn_near_players(tile):
+
     if count_visible_item(tile, "player") > 1:
         return True
 
@@ -238,6 +241,47 @@ def should_take_linemate_first(tile):
         return False
     return True
 
+def should_take_deraumere_first(tile, inventory):
+
+    if "deraumere" not in tile:
+        return False
+    if inventory.get("deraumere", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_take_sibur_first(tile, inventory):
+
+    if "sibur" not in tile:
+        return False
+    if inventory.get("sibur", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_take_mendiane_first(tile, inventory):
+    if "mendiane" not in tile:
+        return False
+    if inventory.get("mendiane", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+def should_take_phiras_first(tile, inventory):
+    if "phiras" not in tile:
+        return False
+    if inventory.get("phiras", 0) > 0:
+        return False
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -266,6 +310,18 @@ def main():
                 continue
             if should_take_linemate_first(tile):
                 send_command_to_server(server_connection, "Take linemate")
+                continue
+            if should_take_deraumere_first(tile, inventory):
+                send_command_to_server(server_connection, "Take deraumere")
+                continue
+            if should_take_sibur_first(tile, inventory):
+                send_command_to_server(server_connection, "Take sibur")
+                continue
+            if should_take_mendiane_first(tile, inventory):
+                send_command_to_server(server_connection, "Take mendiane")
+                continue
+            if should_take_phiras_first(tile, inventory):
+                send_command_to_server(server_connection, "Take phiras")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
