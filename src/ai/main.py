@@ -184,6 +184,32 @@ def should_turn_near_players(tile):
 
     return False
 
+def should_collect_rare_stone(tile):
+    if "sibur" in tile:
+        return True
+
+    if "mendiane" in tile:
+        return True
+    if "phiras" in tile or "thystame" in tile:
+        return True
+    return False
+def should_follow_egg(tile):
+    if "egg" in tile:
+        return True
+    return False
+
+def should_check_inventory(tile):
+    if "player" in tile and "food" not in tile:
+        return True
+    return False
+
+def should_turn_on_busy_tile(tile):
+    if len(tile) > 4:
+        return True
+    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -227,6 +253,17 @@ def main():
                 continue
             if should_collect_stone(tile):
                 collect_visible_resource(server_connection, tile)
+                continue
+            if should_collect_rare_stone(tile):
+                collect_visible_resource(server_connection, tile)
+                continue
+            if should_follow_egg(tile):
+                send_command_to_server(server_connection, "Left")
+                continue
+            if should_check_inventory(tile):
+                send_command_to_server(server_connection, "Inventory")
+            if should_turn_on_busy_tile(tile):
+                send_command_to_server(server_connection, "Right")
                 continue
             if should_turn_near_players(tile):
                 send_command_to_server(server_connection, "Left")
