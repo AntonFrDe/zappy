@@ -250,6 +250,18 @@ def should_take_deraumere_first(tile, inventory):
         return False
     return True
 
+def should_take_sibur_first(tile, inventory):
+
+    if "sibur" not in tile:
+        return False
+    if inventory.get("sibur", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -281,6 +293,9 @@ def main():
                 continue
             if should_take_deraumere_first(tile, inventory):
                 send_command_to_server(server_connection, "Take deraumere")
+                continue
+            if should_take_sibur_first(tile, inventory):
+                send_command_to_server(server_connection, "Take sibur")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
