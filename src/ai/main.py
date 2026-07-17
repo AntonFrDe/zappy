@@ -282,6 +282,26 @@ def should_take_phiras_first(tile, inventory):
         return False
     return True
 
+def should_take_thystame_first(tile, inventory):
+    if "thystame" not in tile:
+        return False
+    if inventory.get("thystame", 0) > 0:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_avoid_busy_resource_tile(tile):
+    if count_visible_item(tile, "player") == 0:
+        return False
+    if "linemate" in tile:
+        return True
+    if "deraumere" in tile:
+        return True
+    if "sibur" in tile or "mendiane" in tile:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -308,6 +328,9 @@ def main():
                 continue
             if if_low_food_seek_food(server_connection, inventory, tile):
                 continue
+            if should_avoid_busy_resource_tile(tile):
+                send_command_to_server(server_connection, "Right")
+                continue
             if should_take_linemate_first(tile):
                 send_command_to_server(server_connection, "Take linemate")
                 continue
@@ -322,6 +345,9 @@ def main():
                 continue
             if should_take_phiras_first(tile, inventory):
                 send_command_to_server(server_connection, "Take phiras")
+                continue
+            if should_take_thystame_first(tile, inventory):
+                send_command_to_server(server_connection, "Take thystame")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
