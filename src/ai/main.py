@@ -203,6 +203,13 @@ def should_check_inventory(tile):
         return True
     return False
 
+def should_turn_on_busy_tile(tile):
+    if len(tile) > 4:
+        return True
+    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
+        return True
+    return False
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -255,6 +262,9 @@ def main():
                 continue
             if should_check_inventory(tile):
                 send_command_to_server(server_connection, "Inventory")
+            if should_turn_on_busy_tile(tile):
+                send_command_to_server(server_connection, "Right")
+                continue
             if should_turn_near_players(tile):
                 send_command_to_server(server_connection, "Left")
                 continue
