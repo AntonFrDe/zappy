@@ -266,6 +266,7 @@ def should_take_sibur_first(tile, inventory):
     return True
 
 def should_take_mendiane_first(tile, inventory):
+
     if "mendiane" not in tile:
         return False
     if inventory.get("mendiane", 0) > 1:
@@ -275,7 +276,9 @@ def should_take_mendiane_first(tile, inventory):
     if "player" in tile:
         return False
     return True
+
 def should_take_phiras_first(tile, inventory):
+
     if "phiras" not in tile:
         return False
     if inventory.get("phiras", 0) > 0:
@@ -315,6 +318,18 @@ def try_create_team_slot(server_connection, inventory):
         return False
     send_command_to_server(server_connection, "Fork")
     return True
+
+def wait_before_incantation(server_connection, inventory, tile):
+    if inventory.get("linemate", 0) < 1 and "linemate" in tile:
+        send_command_to_server(server_connection, "Take linemate")
+        return
+    if inventory.get("food", 0) < 2 and "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return
+    if inventory.get("linemate", 0) < 1 or inventory.get("food", 0) < 2:
+        send_command_to_server(server_connection, choose_exploration_command(tile))
+        return
+    send_command_to_server(server_connection, "Look")
 
 def main():
 
@@ -369,12 +384,7 @@ def main():
                 send_command_to_server(server_connection, "Take food")
                 continue
             if should_wait_before_incantation(inventory):
-                if inventory.get("linemate", 0) < 1:
-                    send_command_to_server(server_connection, choose_exploration_command(tile))
-                elif inventory.get("food", 0) < 2 and "food" not in tile:
-                    send_command_to_server(server_connection, choose_exploration_command(tile))
-                else:
-                    send_command_to_server(server_connection, "Look")
+                wait_before_incantation(server_connection, inventory, tile)
                 continue
             if try_first_incantation(server_connection, inventory, tile):
                 continue
