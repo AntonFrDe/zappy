@@ -106,7 +106,9 @@ def try_first_incantation(server_connection, inventory, tile):
     if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
         return False
     if "linemate" not in tile:
-        send_command_to_server(server_connection, "Set linemate")
+        reponse = send_command_to_server(server_connection, "Set linemate")
+        if reponse != "ok":
+            return False
     reponse = send_command_to_server(server_connection, "Incantation")
 
     if reponse == "Elevation underway":
