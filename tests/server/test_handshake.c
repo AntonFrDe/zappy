@@ -3,6 +3,12 @@
 ** (accept_new_client / handle_team_name / disconnect_client in network.c).
 ** Framework: Criterion (each Test() runs in its own forked process, so
 ** the server thread started here dies with the process at test end).
+**
+** server/cfg/teams are heap-allocated (and intentionally never freed):
+** the server thread is detached and never stopped, so it keeps running
+** (and dereferencing them) after the Test() function returns. Putting
+** them on the Test() stack is a use-after-return bug (confirmed with
+** AddressSanitizer) that made this file crash intermittently.
 */
 
 #include <criterion/criterion.h>
@@ -22,11 +28,28 @@ static void *run_server(void *arg)
     return NULL;
 }
 
-static void start_test_server(server_t *server, flags_t *cfg, pthread_t *thread)
+static flags_t *alloc_single_team_cfg(int port, uint64_t width,
+    uint64_t height, uint16_t clients_nb)
 {
+    char **teams = malloc(sizeof(char *));
+    flags_t *cfg = malloc(sizeof(flags_t));
+
+    teams[0] = "team1";
+    *cfg = (flags_t){
+        .port = port, .width = width, .height = height,
+        .teams = teams, .teams_nb = 1, .clients_nb = clients_nb, .freq = 100
+    };
+    return cfg;
+}
+
+static server_t *start_test_server(flags_t *cfg, pthread_t *thread)
+{
+    server_t *server = malloc(sizeof(server_t));
+
     cr_assert_eq(server_init(server, cfg), 0);
     cr_assert_eq(pthread_create(thread, NULL, run_server, server), 0);
     pthread_detach(*thread);
+    return server;
 }
 
 static int connect_to_server(int port)
@@ -62,18 +85,13 @@ static int read_line(int sock, char *out, size_t out_size)
 
 Test(handshake, valid_team_gets_client_num_and_map_size)
 {
-    char *teams[] = { "team1" };
-    flags_t cfg = {
-        .port = 4601, .width = 10, .height = 10,
-        .teams = teams, .teams_nb = 1, .clients_nb = 2, .freq = 100
-    };
-    server_t server;
+    flags_t *cfg = alloc_single_team_cfg(4601, 10, 10, 2);
     pthread_t thread;
     int sock;
     char line[256];
 
-    start_test_server(&server, &cfg, &thread);
-    sock = connect_to_server(cfg.port);
+    start_test_server(cfg, &thread);
+    sock = connect_to_server(cfg->port);
 
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "WELCOME");
@@ -91,19 +109,14 @@ Test(handshake, valid_team_gets_client_num_and_map_size)
 
 Test(handshake, unknown_team_disconnects_client)
 {
-    char *teams[] = { "team1" };
-    flags_t cfg = {
-        .port = 4602, .width = 8, .height = 8,
-        .teams = teams, .teams_nb = 1, .clients_nb = 1, .freq = 100
-    };
-    server_t server;
+    flags_t *cfg = alloc_single_team_cfg(4602, 8, 8, 1);
     pthread_t thread;
     int sock;
     char line[256];
     char c;
 
-    start_test_server(&server, &cfg, &thread);
-    sock = connect_to_server(cfg.port);
+    start_test_server(cfg, &thread);
+    sock = connect_to_server(cfg->port);
 
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "WELCOME");
@@ -117,18 +130,13 @@ Test(handshake, unknown_team_disconnects_client)
 
 Test(handshake, graphic_gets_client_num_zero_and_map_size)
 {
-    char *teams[] = { "team1" };
-    flags_t cfg = {
-        .port = 4603, .width = 15, .height = 20,
-        .teams = teams, .teams_nb = 1, .clients_nb = 1, .freq = 100
-    };
-    server_t server;
+    flags_t *cfg = alloc_single_team_cfg(4603, 15, 20, 1);
     pthread_t thread;
     int sock;
     char line[256];
 
-    start_test_server(&server, &cfg, &thread);
-    sock = connect_to_server(cfg.port);
+    start_test_server(cfg, &thread);
+    sock = connect_to_server(cfg->port);
 
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "WELCOME");
@@ -146,26 +154,21 @@ Test(handshake, graphic_gets_client_num_zero_and_map_size)
 
 Test(handshake, full_team_disconnects_next_client)
 {
-    char *teams[] = { "team1" };
-    flags_t cfg = {
-        .port = 4604, .width = 5, .height = 5,
-        .teams = teams, .teams_nb = 1, .clients_nb = 1, .freq = 100
-    };
-    server_t server;
+    flags_t *cfg = alloc_single_team_cfg(4604, 5, 5, 1);
     pthread_t thread;
     int sock1, sock2;
     char line[256];
     char c;
 
-    start_test_server(&server, &cfg, &thread);
+    start_test_server(cfg, &thread);
 
-    sock1 = connect_to_server(cfg.port);
+    sock1 = connect_to_server(cfg->port);
     cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
     cr_assert_eq(write(sock1, "team1\n", 6), 6);
     cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "0");
 
-    sock2 = connect_to_server(cfg.port);
+    sock2 = connect_to_server(cfg->port);
     cr_assert_eq(read_line(sock2, line, sizeof(line)), 0);
     cr_assert_eq(write(sock2, "team1\n", 6), 6);
     cr_assert_eq(read(sock2, &c, 1), 0);
@@ -176,18 +179,13 @@ Test(handshake, full_team_disconnects_next_client)
 
 Test(handshake, crlf_team_name_is_accepted)
 {
-    char *teams[] = { "team1" };
-    flags_t cfg = {
-        .port = 4605, .width = 12, .height = 12,
-        .teams = teams, .teams_nb = 1, .clients_nb = 1, .freq = 100
-    };
-    server_t server;
+    flags_t *cfg = alloc_single_team_cfg(4605, 12, 12, 1);
     pthread_t thread;
     int sock;
     char line[256];
 
-    start_test_server(&server, &cfg, &thread);
-    sock = connect_to_server(cfg.port);
+    start_test_server(cfg, &thread);
+    sock = connect_to_server(cfg->port);
 
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_eq(write(sock, "team1\r\n", 7), 7);
