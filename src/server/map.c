@@ -25,16 +25,36 @@ void map_destroy(map_t *map)
     free(map);
 }
 
-// wrap torique: ramene x/y dans [0, width[ / [0, height[ meme si negatif
-static int64_t wrap(int64_t v, int64_t max)
+// Empeche la creation de map qui ferai crash
+static int64_t secure_mod(int64_t v, int64_t max)
 {
     return ((v % max) + max) % max;
 }
 
 tile_t *map_get_tile(map_t *map, int64_t x, int64_t y)
 {
-    int64_t wx = wrap(x, (int64_t)map->width);
-    int64_t wy = wrap(y, (int64_t)map->height);
+    int64_t wx = secure_mod(x, (int64_t)map->width);
+    int64_t wy = secure_mod(y, (int64_t)map->height);
 
     return &map->tiles[wy * (int64_t)map->width + wx];
+}
+
+void map_move(map_t *map, int64_t *x, int64_t *y, direction_t dir)
+{
+    switch (dir) {
+    case DIR_NORTH:
+        *y -= 1;
+        break;
+    case DIR_EAST:
+        *x += 1;
+        break;
+    case DIR_SOUTH:
+        *y += 1;
+        break;
+    case DIR_WEST:
+        *x -= 1;
+        break;
+    }
+    *x = secure_mod(*x, (int64_t)map->width);
+    *y = secure_mod(*y, (int64_t)map->height);
 }

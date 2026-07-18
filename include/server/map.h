@@ -24,10 +24,20 @@
         tile_t *tiles; // row-major, tiles[y * width + x]
     } map_t;
 
+// aligne sur le protocole gui (orientation O: 1=N 2=E 3=S 4=W)
+    typedef enum {
+        DIR_NORTH = 1,
+        DIR_EAST = 2,
+        DIR_SOUTH = 3,
+        DIR_WEST = 4
+    } direction_t;
+
     map_t *map_create(uint64_t width, uint64_t height);
     void map_destroy(map_t *map);
     // x/y wrappes torique (accepte negatif et >= width/height)
     tile_t *map_get_tile(map_t *map, int64_t x, int64_t y);
+    // avance x/y d'une case dans dir, wrap torique inclus
+    void map_move(map_t *map, int64_t *x, int64_t *y, direction_t dir);
 
 // TODO: spawn des ressources (densite * width * height, respawn 20 u.t.)
 // -> prochaine tache, pas fait ici volontairement
