@@ -81,10 +81,10 @@ static void accept_new_client(server_t *server)
     server->nfds++;
 }
 
-static void disconnect_client(server_t *server, int team_i)
+static void disconnect_client(server_t *server, int client_idx)
 {
-    client_destroy(server->clients[team_i]);
-    for (int i = team_i; i < server->nfds - 1; i++) {
+    client_destroy(server->clients[client_idx]);
+    for (int i = client_idx; i < server->nfds - 1; i++) {
         server->clients[i] = server->clients[i + 1];
         server->fds[i] = server->fds[i + 1];
     }
@@ -109,7 +109,9 @@ static void send_map_size(server_t *server, client_t *client)
     client_queue_send(client, msg);
 }
 
-static void handle_team_name(server_t *server, client_t *client, const char *name)
+// renvoie true si le client a ete deconnecte (handshake refuse)
+static bool handle_team_name(server_t *server, client_t *client,
+    const char *name, int client_idx)
 {
     char msg[64];
     //Timmyy !!
@@ -118,13 +120,15 @@ static void handle_team_name(server_t *server, client_t *client, const char *nam
     if (strcmp(name, "GRAPHIC") == 0) {
         client->is_graphic = true;
         client->handshake_done = true;
+        client_queue_send(client, "0\n");
         send_map_size(server, client);
-        return;
+        return false;
     }
     team_i = find_team_index(server, name);
     if (team_i < 0 || server->slots_remaining[team_i] == 0) {
-        client_queue_send(client, "ko\n");
-        return;
+        // DECO LE CLIENT EN CAS DE PROBLEM
+        disconnect_client(server, client_idx);
+        return true;
     }
     server->slots_remaining[team_i]--;
     client->team_index = team_i;
@@ -132,19 +136,24 @@ static void handle_team_name(server_t *server, client_t *client, const char *nam
     snprintf(msg, sizeof(msg), "%u\n", server->slots_remaining[team_i]);
     client_queue_send(client, msg);
     send_map_size(server, client);
+    return false;
 }
 
-static void process_client_input(server_t *server, int team_i)
+// renvoie 1 si le client a ete deco pendant le traitement (handshake refuse)
+static int process_client_input(server_t *server, int client_idx)
 {
-    client_t *client = server->clients[team_i];
+    client_t *client = server->clients[client_idx];
     char line[512];
 
     while (client_extract_line(client, line, sizeof(line))) {
-        if (!client->handshake_done)
-            handle_team_name(server, client, line);
-        else
+        if (!client->handshake_done) {
+            if (handle_team_name(server, client, line, client_idx))
+                return 1;
+        } else {
             client_push_cmd(client, line);
+        }
     }
+    return 0;
 }
 
 static void update_poll_events(server_t *server)
@@ -165,7 +174,8 @@ static int handle_client_events(server_t *server, int i)
             disconnect_client(server, i);
             return 1;
         }
-        process_client_input(server, i);
+        if (process_client_input(server, i))
+            return 1;
     }
     if (server->fds[i].revents & POLLOUT)
         client_flush_send(server->clients[i]);

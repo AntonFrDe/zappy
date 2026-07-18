@@ -50,6 +50,8 @@ int client_extract_line(client_t *client, char *line, size_t line_size)
     if (nl == NULL)
         return 0;
     cut = (size_t)(nl - client->recv_buf);
+    if (cut > 0 && client->recv_buf[cut - 1] == '\r')
+        cut--;
     memcpy(line, client->recv_buf, cut < line_size ? cut : line_size - 1);
     line[cut < line_size ? cut : line_size - 1] = '\0';
     cut = (size_t)(nl - client->recv_buf) + 1;

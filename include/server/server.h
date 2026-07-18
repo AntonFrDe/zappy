@@ -8,4 +8,6 @@
     #include <stdlib.h>
     #include <stdio.h>
 
+    retour_t parser(int argc, char **argv);
+
 #endif /* !SERVER_H_ */

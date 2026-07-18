@@ -102,18 +102,23 @@ def choose_exploration_command(tile):
     return choice(["Forward", "Left", "Right"])
 
 def try_first_incantation(server_connection, inventory, tile):
+
     if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
         return False
     if "linemate" not in tile:
-        send_command_to_server(server_connection, "Set linemate")
-    answer = send_command_to_server(server_connection, "Incantation")
+        reponse = send_command_to_server(server_connection, "Set linemate")
+        if reponse != "ok":
+            return False
+    reponse = send_command_to_server(server_connection, "Incantation")
 
-    if answer == "Elevation underway":
-        receive_response_from_server(server_connection)
-        return True
+    if reponse == "Elevation underway":
+        reponse = receive_response_from_server(server_connection)
+        if reponse.startswith("Current level:"):
+            return True
     return False
 
 def should_take_food(tile, inventory):
+
     food_count = count_visible_item(tile, "food")
     if food_count == 0:
         return False
@@ -126,6 +131,7 @@ def should_take_food(tile, inventory):
     return False
 
 def should_collect_stone(tile):
+
     if count_visible_item(tile, "linemate") > 0:
         return True
     if count_visible_item(tile, "deraumere") > 0:
@@ -133,6 +139,7 @@ def should_collect_stone(tile):
     return False
 
 def should_wait_before_incantation(inventory):
+
     food, linemate = inventory.get("food", 0), inventory.get("linemate", 0)
     if food == 0:
         return True
@@ -144,7 +151,25 @@ def should_wait_before_incantation(inventory):
         return True
     return False
 
+def can_try_level_two(inventory, tile):
+    if inventory.get("food", 0) < 2:
+        return False
+    if inventory.get("linemate", 0) > 0:
+        return True
+    if "linemate" in tile:
+        return True
+    return False
+
+def try_level_two_incantation(server_connection, inventory, tile):
+    if not can_try_level_two(inventory, tile):
+        return False
+    if count_visible_item(tile, "player") > 1:
+        send_command_to_server(server_connection, "Right")
+        return True
+    return try_first_incantation(server_connection, inventory, tile)
+
 def move_when_food_is_low(server_connection, inventory, tile):
+
     if inventory.get("food", 0) >= 3:
         return False
     if "food" in tile:
@@ -152,6 +177,188 @@ def move_when_food_is_low(server_connection, inventory, tile):
         return True
     send_command_to_server(server_connection, "Forward")
     return True
+
+def turn_on_empty_tile(server_connection, tile):
+
+    if len(tile) != 0:
+        return False
+    send_command_to_server(server_connection, "Right")
+    return True
+
+def should_skip_extra_stone(inventory, tile):
+    if inventory.get("linemate", 0) > 1 and "linemate" in tile:
+        return True
+    if inventory.get("deraumere", 0) > 1 and "deraumere" in tile:
+        return True
+    if inventory.get("sibur", 0) > 1 and "sibur" in tile:
+        return True
+    return False
+
+def shold_move_after_look(server_connection, tile):
+
+    smal_tile = len(tile) < 2
+
+    if "food" in tile or should_collect_stone(tile) or not smal_tile:
+        return False
+
+    send_command_to_server(server_connection, "Forward")
+    return True
+
+def should_turn_near_players(tile):
+
+    if count_visible_item(tile, "player") > 1:
+        return True
+
+    return False
+
+def should_collect_rare_stone(tile):
+    if "sibur" in tile:
+        return True
+
+    if "mendiane" in tile:
+        return True
+    if "phiras" in tile or "thystame" in tile:
+        return True
+    return False
+def should_follow_egg(tile):
+    if "egg" in tile:
+        return True
+    return False
+
+def should_check_inventory(tile):
+    if "player" in tile and "food" not in tile:
+        return True
+    return False
+
+def should_turn_on_busy_tile(tile):
+
+    if len(tile) > 4:
+        return True
+    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
+        return True
+    return False
+
+def if_low_food_seek_food(server_connection, inventory, tile):
+
+    food = inventory.get("food", 0)
+
+    if food > 8:
+        return False
+    if "food" not in tile:
+        return False
+    if count_visible_item(tile, "player") > 0:
+        send_command_to_server(server_connection, "Take food")
+        return True
+    if count_visible_item(tile, "food") > 0:
+        send_command_to_server(server_connection, "Take food")
+        return True
+    return False
+
+def should_take_linemate_first(tile):
+    if "linemate" not in tile:
+        return False
+    if "food" in tile:
+        return False
+    return True
+
+def should_take_deraumere_first(tile, inventory):
+
+    if "deraumere" not in tile:
+        return False
+    if inventory.get("deraumere", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_take_sibur_first(tile, inventory):
+
+    if "sibur" not in tile:
+        return False
+    if inventory.get("sibur", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_take_mendiane_first(tile, inventory):
+
+    if "mendiane" not in tile:
+        return False
+    if inventory.get("mendiane", 0) > 1:
+        return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_take_phiras_first(tile, inventory):
+
+    if "phiras" not in tile:
+        return False
+    if inventory.get("phiras", 0) > 0:
+        return False
+    return True
+
+def should_take_thystame_first(tile, inventory):
+    if "thystame" not in tile:
+        return False
+    if inventory.get("thystame", 0) > 0:
+        return False
+    if "player" in tile:
+        return False
+    return True
+
+def should_avoid_busy_resource_tile(tile):
+
+    if count_visible_item(tile, "player") == 0:
+        return False
+    if "linemate" in tile:
+        return True
+    if "deraumere" in tile:
+        return True
+    if "sibur" in tile or "mendiane" in tile:
+        return True
+    return False
+
+def try_create_team_slot(server_connection, inventory, tile):
+
+    if can_try_level_two(inventory, tile):
+        return False
+    if inventory.get("food", 0) < 8:
+        return False
+    if inventory.get("linemate", 0) < 1:
+        return False
+    reponse = send_command_to_server(server_connection, "Connect_nbr")
+    if not reponse.isdigit():
+        return False
+    if int(reponse) > 0:
+        return False
+    send_command_to_server(server_connection, "Fork")
+    return True
+
+def wait_before_incantation(server_connection, inventory, look, tile):
+    if inventory.get("food", 0) < 2 and "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return
+    if inventory.get("linemate", 0) < 1 and "linemate" in tile:
+        send_command_to_server(server_connection, "Take linemate")
+        return
+    if inventory.get("linemate", 0) < 1 and "linemate" in look:
+        send_command_to_server(server_connection, "Forward")
+        return
+    if inventory.get("food", 0) < 2 and "food" in look:
+        send_command_to_server(server_connection, "Forward")
+        return
+    if inventory.get("linemate", 0) < 1 or inventory.get("food", 0) < 2:
+        send_command_to_server(server_connection, choose_exploration_command(tile))
+        return
+    send_command_to_server(server_connection, "Look")
 
 def main():
 
@@ -171,17 +378,49 @@ def main():
             tile = look.strip("[]").split(",")[0].split()
 
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+            if should_wait_before_incantation(inventory):
+                wait_before_incantation(server_connection, inventory, look, tile)
+                continue
             if len(tile) == 0:
                 send_command_to_server(server_connection, "Look")
+            if turn_on_empty_tile(server_connection, tile):
+                continue
             if move_when_food_is_low(server_connection, inventory, tile):
+                continue
+            if try_level_two_incantation(server_connection, inventory, tile):
+                continue
+            if try_create_team_slot(server_connection, inventory, tile):
+                continue
+            if if_low_food_seek_food(server_connection, inventory, tile):
+                continue
+            if should_avoid_busy_resource_tile(tile):
+                send_command_to_server(server_connection, "Right")
+                continue
+            if should_take_linemate_first(tile):
+                send_command_to_server(server_connection, "Take linemate")
+                continue
+            if should_take_deraumere_first(tile, inventory):
+                send_command_to_server(server_connection, "Take deraumere")
+                continue
+            if should_take_sibur_first(tile, inventory):
+                send_command_to_server(server_connection, "Take sibur")
+                continue
+            if should_take_mendiane_first(tile, inventory):
+                send_command_to_server(server_connection, "Take mendiane")
+                continue
+            if should_take_phiras_first(tile, inventory):
+                send_command_to_server(server_connection, "Take phiras")
+                continue
+            if should_take_thystame_first(tile, inventory):
+                send_command_to_server(server_connection, "Take thystame")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
                 continue
-            if should_wait_before_incantation(inventory):
-                send_command_to_server(server_connection, "Look")
+            if should_skip_extra_stone(inventory, tile):
+                send_command_to_server(server_connection, "Forward")
                 continue
-            if try_first_incantation(server_connection, inventory, tile):
+            if shold_move_after_look(server_connection, tile):
                 continue
             food_count = count_visible_item(tile, "food")
             if food_count > 1:
@@ -189,6 +428,20 @@ def main():
                 continue
             if should_collect_stone(tile):
                 collect_visible_resource(server_connection, tile)
+                continue
+            if should_collect_rare_stone(tile):
+                collect_visible_resource(server_connection, tile)
+                continue
+            if should_follow_egg(tile):
+                send_command_to_server(server_connection, "Left")
+                continue
+            if should_check_inventory(tile):
+                send_command_to_server(server_connection, "Inventory")
+            if should_turn_on_busy_tile(tile):
+                send_command_to_server(server_connection, "Right")
+                continue
+            if should_turn_near_players(tile):
+                send_command_to_server(server_connection, "Left")
                 continue
             player_count = count_visible_item(tile, "player")
             if player_count > 0:
