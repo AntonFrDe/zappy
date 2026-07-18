@@ -16,19 +16,21 @@ def receive_response_from_server(server_connection):
 
     while not data.endswith(b"\n"):
         part_of_response = server_connection.recv(1)
-
         if not part_of_response:
             sys.exit(84)
         data += part_of_response
+
     normal_text = data.decode().strip()
 
     if normal_text == "dead":
         sys.exit(0)
+
     return normal_text
 
 def send_command_to_server(server_connection, command):
 
     server_connection.sendall((command + "\n").encode())
+
     return receive_response_from_server(server_connection)
 
 def parse_inventory_response(response):
@@ -37,6 +39,7 @@ def parse_inventory_response(response):
     items = response.strip("[]").split(",")
 
     for item in items:
+
         parts = item.split()
 
         if len(parts) == 2 and parts[1].isdigit():
@@ -57,6 +60,7 @@ def keep_player_alive(server_connection):
     if "food" in tile:
         send_command_to_server(server_connection, "Take food")
         return True
+
     send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
 
     return True
@@ -79,6 +83,7 @@ def count_visible_item(tile, item):
     i = 0
 
     for y in tile:
+
         if y == item:
             i = i + 1
 
@@ -86,7 +91,7 @@ def count_visible_item(tile, item):
 
 def choose_exploration_command(tile):
 
-    if count_visible_item(tile, "player") > 1:
+    if count_visible_item(tile, "player") > 0:
         return "Right"
     if "egg" in tile:
         return "Left"
@@ -211,6 +216,13 @@ def should_turn_near_players(tile):
 
     return False
 
+def should_leave_player_only_tile(tile):
+
+    player_count = count_visible_item(tile, "player")
+    if player_count == 0:
+        return False
+    return len(tile) == player_count
+
 def should_collect_rare_stone(tile):
     if "sibur" in tile:
         return True
@@ -220,13 +232,20 @@ def should_collect_rare_stone(tile):
     if "phiras" in tile or "thystame" in tile:
         return True
     return False
+
+def should_ignore_egg_when_hungry(tile, inventory):
+
+    if "egg" not in tile or "food" in tile:
+        return False
+    return inventory.get("food", 0) < 4
+
 def should_follow_egg(tile):
     if "egg" in tile:
         return True
     return False
 
 def should_check_inventory(tile):
-    if count_visible_item(tile, "player") > 1 and "food" not in tile:
+    if count_visible_item(tile, "player") > 0 and "food" not in tile:
         return True
     return False
 
@@ -234,7 +253,7 @@ def should_turn_on_busy_tile(tile):
 
     if len(tile) > 4:
         return True
-    if count_visible_item(tile, "player") > 1 and len(tile) > 2:
+    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
         return True
     return False
 
@@ -269,7 +288,7 @@ def should_take_deraumere_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if count_visible_item(tile, "player") > 1:
+    if count_visible_item(tile, "player") > 0:
         return False
     return True
 
@@ -281,7 +300,7 @@ def should_take_sibur_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if count_visible_item(tile, "player") > 1:
+    if count_visible_item(tile, "player") > 0:
         return False
     return True
 
@@ -293,7 +312,7 @@ def should_take_mendiane_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if count_visible_item(tile, "player") > 1:
+    if count_visible_item(tile, "player") > 0:
         return False
     return True
 
@@ -310,13 +329,13 @@ def should_take_thystame_first(tile, inventory):
         return False
     if inventory.get("thystame", 0) > 0:
         return False
-    if count_visible_item(tile, "player") > 1:
+    if count_visible_item(tile, "player") > 0:
         return False
     return True
 
 def should_avoid_busy_resource_tile(tile):
 
-    if count_visible_item(tile, "player") <= 1:
+    if count_visible_item(tile, "player") == 0:
         return False
     if "linemate" in tile:
         return True
@@ -324,6 +343,18 @@ def should_avoid_busy_resource_tile(tile):
         return True
     if "sibur" in tile or "mendiane" in tile:
         return True
+    return False
+
+def should_seek_food_before_rare_stone(tile, inventory):
+
+    rare_stones = ["sibur", "mendiane", "phiras", "thystame"]
+    if inventory.get("food", 0) >= 4:
+        return False
+    if "food" in tile or count_visible_item(tile, "player") > 0:
+        return False
+    for resource in rare_stones:
+        if resource in tile:
+            return True
     return False
 
 def try_create_team_slot(server_connection, inventory, tile):
@@ -396,11 +427,17 @@ def main():
             if should_avoid_busy_resource_tile(tile):
                 send_command_to_server(server_connection, "Right")
                 continue
+            if should_leave_player_only_tile(tile):
+                send_command_to_server(server_connection, "Right")
+                continue
             if should_take_linemate_first(tile):
                 send_command_to_server(server_connection, "Take linemate")
                 continue
             if should_take_deraumere_first(tile, inventory):
                 send_command_to_server(server_connection, "Take deraumere")
+                continue
+            if should_seek_food_before_rare_stone(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
                 continue
             if should_take_sibur_first(tile, inventory):
                 send_command_to_server(server_connection, "Take sibur")
@@ -431,6 +468,9 @@ def main():
                 continue
             if should_collect_rare_stone(tile):
                 collect_visible_resource(server_connection, tile)
+                continue
+            if should_ignore_egg_when_hungry(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
                 continue
             if should_follow_egg(tile):
                 send_command_to_server(server_connection, "Left")
