@@ -86,7 +86,7 @@ def count_visible_item(tile, item):
 
 def choose_exploration_command(tile):
 
-    if "player" in tile:
+    if count_visible_item(tile, "player") > 1:
         return "Right"
     if "egg" in tile:
         return "Left"
@@ -226,7 +226,7 @@ def should_follow_egg(tile):
     return False
 
 def should_check_inventory(tile):
-    if "player" in tile and "food" not in tile:
+    if count_visible_item(tile, "player") > 1 and "food" not in tile:
         return True
     return False
 
@@ -234,7 +234,7 @@ def should_turn_on_busy_tile(tile):
 
     if len(tile) > 4:
         return True
-    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
+    if count_visible_item(tile, "player") > 1 and len(tile) > 2:
         return True
     return False
 
@@ -246,7 +246,7 @@ def if_low_food_seek_food(server_connection, inventory, tile):
         return False
     if "food" not in tile:
         return False
-    if count_visible_item(tile, "player") > 0:
+    if count_visible_item(tile, "player") > 1:
         send_command_to_server(server_connection, "Take food")
         return True
     if count_visible_item(tile, "food") > 0:
@@ -269,7 +269,7 @@ def should_take_deraumere_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if "player" in tile:
+    if count_visible_item(tile, "player") > 1:
         return False
     return True
 
@@ -281,7 +281,7 @@ def should_take_sibur_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if "player" in tile:
+    if count_visible_item(tile, "player") > 1:
         return False
     return True
 
@@ -293,7 +293,7 @@ def should_take_mendiane_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if "player" in tile:
+    if count_visible_item(tile, "player") > 1:
         return False
     return True
 
@@ -310,13 +310,13 @@ def should_take_thystame_first(tile, inventory):
         return False
     if inventory.get("thystame", 0) > 0:
         return False
-    if "player" in tile:
+    if count_visible_item(tile, "player") > 1:
         return False
     return True
 
 def should_avoid_busy_resource_tile(tile):
 
-    if count_visible_item(tile, "player") == 0:
+    if count_visible_item(tile, "player") <= 1:
         return False
     if "linemate" in tile:
         return True
@@ -444,7 +444,7 @@ def main():
                 send_command_to_server(server_connection, "Left")
                 continue
             player_count = count_visible_item(tile, "player")
-            if player_count > 0:
+            if player_count > 1:
                 send_command_to_server(server_connection, "Right")
                 continue
             if "food" in tile:
