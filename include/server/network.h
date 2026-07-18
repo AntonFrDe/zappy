@@ -3,6 +3,7 @@
     #include <poll.h>
     #include "struct.h"
     #include "client.h"
+    #include "map.h"
 
     #define SERVER_MAX_CLIENTS 128
     #define SERVER_BACKLOG 16
@@ -14,6 +15,7 @@
         client_t *clients[SERVER_MAX_CLIENTS + 1];
         flags_t *cfg;
         uint16_t *slots_remaining;
+        map_t *map;
     } server_t;
 
     int server_init(server_t *server, flags_t *cfg);

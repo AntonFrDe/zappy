@@ -41,6 +41,12 @@ int server_init(server_t *server, flags_t *cfg)
         close(server->listen_fd);
         return -1;
     }
+    server->map = map_create(cfg->width, cfg->height);
+    if (server->map == NULL) {
+        free(server->slots_remaining);
+        close(server->listen_fd);
+        return -1;
+    }
     for (int i = 0; i < cfg->teams_nb; i++)
         server->slots_remaining[i] = cfg->clients_nb;
     server->fds[0].fd = server->listen_fd;
@@ -56,6 +62,7 @@ void server_destroy(server_t *server)
     if (server->listen_fd >= 0)
         close(server->listen_fd);
     free(server->slots_remaining);
+    map_destroy(server->map);
 }
 
 static void accept_new_client(server_t *server)
