@@ -83,6 +83,7 @@ def count_visible_item(tile, item):
     i = 0
 
     for y in tile:
+
         if y == item:
             i = i + 1
 
@@ -224,6 +225,13 @@ def should_collect_rare_stone(tile):
     if "phiras" in tile or "thystame" in tile:
         return True
     return False
+
+def should_ignore_egg_when_hungry(tile, inventory):
+
+    if "egg" not in tile or "food" in tile:
+        return False
+    return inventory.get("food", 0) < 4
+
 def should_follow_egg(tile):
     if "egg" in tile:
         return True
@@ -450,6 +458,9 @@ def main():
                 continue
             if should_collect_rare_stone(tile):
                 collect_visible_resource(server_connection, tile)
+                continue
+            if should_ignore_egg_when_hungry(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
                 continue
             if should_follow_egg(tile):
                 send_command_to_server(server_connection, "Left")
