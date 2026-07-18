@@ -11,12 +11,7 @@ retour_t parser(int argc, char **argv);
 
 static void free_flags(retour_t rt)
 {
-    flags_t *flags = rt.value;
-
-    if (flags == NULL)
-        return;
-    free(flags->teams);
-    free(flags);
+    flags_destroy(rt.value);
 }
 
 Test(parser, valid_full_arguments)
