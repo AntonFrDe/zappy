@@ -216,6 +216,13 @@ def should_turn_near_players(tile):
 
     return False
 
+def should_leave_player_only_tile(tile):
+
+    player_count = count_visible_item(tile, "player")
+    if player_count == 0:
+        return False
+    return len(tile) == player_count
+
 def should_collect_rare_stone(tile):
     if "sibur" in tile:
         return True
@@ -418,6 +425,9 @@ def main():
             if if_low_food_seek_food(server_connection, inventory, tile):
                 continue
             if should_avoid_busy_resource_tile(tile):
+                send_command_to_server(server_connection, "Right")
+                continue
+            if should_leave_player_only_tile(tile):
                 send_command_to_server(server_connection, "Right")
                 continue
             if should_take_linemate_first(tile):
