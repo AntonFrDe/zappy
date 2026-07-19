@@ -38,8 +38,10 @@
     tile_t *map_get_tile(map_t *map, int64_t x, int64_t y);
     // avance x/y d'une case dans dir, wrap torique inclus
     void map_move(map_t *map, int64_t *x, int64_t *y, direction_t dir);
+    // place les ressources initiales (densite * width * height, min 1 de chaque)
+    void map_spawn_resources(map_t *map);
 
-// TODO: spawn des ressources (densite * width * height, respawn 20 u.t.)
-// -> prochaine tache, pas fait ici volontairement
+// TODO: respawn periodique toutes les 20 unites de temps
+// -> a faire avec le scheduler (pas encore code)
 
 #endif /* !MAP_H_ */

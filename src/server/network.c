@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <time.h>
 
 static int create_listen_socket(int port)
 {
@@ -47,6 +48,8 @@ int server_init(server_t *server, flags_t *cfg)
         close(server->listen_fd);
         return -1;
     }
+    srand((unsigned int)time(NULL));
+    map_spawn_resources(server->map);
     for (int i = 0; i < cfg->teams_nb; i++)
         server->slots_remaining[i] = cfg->clients_nb;
     server->fds[0].fd = server->listen_fd;
