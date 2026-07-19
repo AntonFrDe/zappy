@@ -286,6 +286,16 @@ def should_take_linemate_first(tile):
         return False
     return True
 
+def should_seek_linemate_before_other_stones(tile, inventory):
+
+    if inventory.get("linemate", 0) > 0:
+        return False
+    if "linemate" in tile or "food" in tile:
+        return False
+    if count_visible_item(tile, "player") > 0:
+        return False
+    return "deraumere" in tile or "sibur" in tile
+
 def should_take_deraumere_first(tile, inventory):
 
     if "deraumere" not in tile:
@@ -438,6 +448,9 @@ def main():
                 continue
             if should_take_linemate_first(tile):
                 send_command_to_server(server_connection, "Take linemate")
+                continue
+            if should_seek_linemate_before_other_stones(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
                 continue
             if should_take_deraumere_first(tile, inventory):
                 send_command_to_server(server_connection, "Take deraumere")
