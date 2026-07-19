@@ -135,6 +135,12 @@ def should_take_food(tile, inventory):
         return True
     return False
 
+def should_skip_food_when_full(tile, inventory):
+
+    if "food" not in tile:
+        return False
+    return inventory.get("food", 0) > 12
+
 def should_collect_stone(tile):
 
     if count_visible_item(tile, "linemate") > 0:
@@ -279,6 +285,16 @@ def should_take_linemate_first(tile):
     if "food" in tile:
         return False
     return True
+
+def should_seek_linemate_before_other_stones(tile, inventory):
+
+    if inventory.get("linemate", 0) > 0:
+        return False
+    if "linemate" in tile or "food" in tile:
+        return False
+    if count_visible_item(tile, "player") > 0:
+        return False
+    return "deraumere" in tile or "sibur" in tile
 
 def should_take_deraumere_first(tile, inventory):
 
@@ -433,6 +449,9 @@ def main():
             if should_take_linemate_first(tile):
                 send_command_to_server(server_connection, "Take linemate")
                 continue
+            if should_seek_linemate_before_other_stones(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
+                continue
             if should_take_deraumere_first(tile, inventory):
                 send_command_to_server(server_connection, "Take deraumere")
                 continue
@@ -450,6 +469,9 @@ def main():
                 continue
             if should_take_thystame_first(tile, inventory):
                 send_command_to_server(server_connection, "Take thystame")
+                continue
+            if should_skip_food_when_full(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
