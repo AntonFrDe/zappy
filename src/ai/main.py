@@ -8,6 +8,9 @@ RARE_STONES = ["sibur", "mendiane", "phiras", "thystame"]
 EARLY_STONE_DISTRACTIONS = ["deraumere", "sibur"]
 GUARDED_STONE_LIMITS = {"sibur": 1, "mendiane": 1, "phiras": 0, "thystame": 0}
 FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
+SURVIVAL_MOVES = ["Forward", "Left", "Right"]
+EXPLORATION_TURNS = ["Left", "Right"]
+EXPLORATION_FORWARD_TARGETS = ["food", "linemate", "deraumere"]
 
 def read_and_get_arguments(argument_type, default=None):
 
@@ -67,7 +70,7 @@ def keep_player_alive(server_connection):
         send_command_to_server(server_connection, "Take food")
         return True
 
-    send_command_to_server(server_connection, choice(["Forward", "Left", "Right"]))
+    send_command_to_server(server_connection, choice(SURVIVAL_MOVES))
 
     return True
 
@@ -95,16 +98,13 @@ def choose_exploration_command(tile):
         return "Right"
     if "egg" in tile:
         return "Left"
-    if "food" in tile:
-        return "Forward"
-    if "linemate" in tile:
-        return "Forward"
-    if "deraumere" in tile:
-        return "Forward"
+    for resource in EXPLORATION_FORWARD_TARGETS:
+        if resource in tile:
+            return "Forward"
     if len(tile) == 0:
-        return choice(["Left", "Right"])
+        return choice(EXPLORATION_TURNS)
 
-    return choice(["Forward", "Left", "Right"])
+    return choice(SURVIVAL_MOVES)
 
 def try_first_incantation(server_connection, inventory, tile):
 
@@ -134,6 +134,10 @@ def should_take_food(tile, inventory):
     if len(tile) == food_count:
         return True
     return False
+
+def should_take_extra_food(tile):
+
+    return count_visible_item(tile, "food") > 1
 
 def should_skip_food_when_full(tile, inventory):
 
@@ -390,6 +394,15 @@ def wait_before_incantation(server_connection, inventory, look, tile):
 
     send_command_to_server(server_connection, "Look")
 
+def do_default_action(server_connection, tile):
+
+    if "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return
+    if collect_visible_resource(server_connection, tile):
+        return
+    send_command_to_server(server_connection, choose_exploration_command(tile))
+
 def main():
 
     port_argument = int(read_and_get_arguments("-p"))
@@ -456,8 +469,7 @@ def main():
                 continue
             if shold_move_after_look(server_connection, tile):
                 continue
-            food_count = count_visible_item(tile, "food")
-            if food_count > 1:
+            if should_take_extra_food(tile):
                 send_command_to_server(server_connection, "Take food")
                 continue
             if should_collect_stone(tile):
@@ -484,12 +496,7 @@ def main():
             if player_count > 1:
                 send_command_to_server(server_connection, "Right")
                 continue
-            if "food" in tile:
-                send_command_to_server(server_connection, "Take food")
-            elif collect_visible_resource(server_connection, tile):
-                continue
-            else:
-                send_command_to_server(server_connection, choose_exploration_command(tile))
+            do_default_action(server_connection, tile)
 
 if __name__ == "__main__":
     main()
