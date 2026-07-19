@@ -24,6 +24,7 @@ void client_destroy(client_t *client)
     free(client->send_buf);
     for (int i = 0; i < client->cmd_count; i++)
         free(client->cmd_queue[i]);
+    free(client->executing_cmd);
     free(client);
 }
 

@@ -1,4 +1,5 @@
 #include "../../include/server/network.h"
+#include "../../include/server/command.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -206,10 +207,11 @@ int server_run(server_t *server)
         
         if (server->fds[0].revents & POLLIN)
             accept_new_client(server);
-        
+
         for (int i = 1; i < server->nfds; i++)
             if (handle_client_events(server, i))
                 i--;
+        scheduler_tick(server);
     }
     return 0;
 }
