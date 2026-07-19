@@ -6,6 +6,7 @@ from random import choice
 RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"]
 RARE_STONES = ["sibur", "mendiane", "phiras", "thystame"]
 EARLY_STONE_DISTRACTIONS = ["deraumere", "sibur"]
+GUARDED_STONE_LIMITS = {"sibur": 1, "mendiane": 1, "phiras": 0, "thystame": 0}
 FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
 
 def read_and_get_arguments(argument_type, default=None):
@@ -306,6 +307,14 @@ def should_take_guarded_stone(tile, inventory, resource, max_count):
 
     return count_visible_item(tile, "player") == 0
 
+def get_guarded_resource_to_take(tile, inventory):
+
+    for resource in RARE_STONES:
+        limit = GUARDED_STONE_LIMITS[resource]
+        if should_take_guarded_stone(tile, inventory, resource, limit):
+            return resource
+    return None
+
 def should_take_sibur_first(tile, inventory):
 
     return should_take_guarded_stone(tile, inventory, "sibur", 1)
@@ -432,17 +441,9 @@ def main():
             if should_seek_food_before_rare_stone(tile, inventory):
                 send_command_to_server(server_connection, "Forward")
                 continue
-            if should_take_sibur_first(tile, inventory):
-                send_command_to_server(server_connection, "Take sibur")
-                continue
-            if should_take_mendiane_first(tile, inventory):
-                send_command_to_server(server_connection, "Take mendiane")
-                continue
-            if should_take_phiras_first(tile, inventory):
-                send_command_to_server(server_connection, "Take phiras")
-                continue
-            if should_take_thystame_first(tile, inventory):
-                send_command_to_server(server_connection, "Take thystame")
+            guarded_resource = get_guarded_resource_to_take(tile, inventory)
+            if guarded_resource is not None:
+                send_command_to_server(server_connection, "Take " + guarded_resource)
                 continue
             if should_skip_food_when_full(tile, inventory):
                 send_command_to_server(server_connection, "Forward")
