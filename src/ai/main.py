@@ -135,6 +135,12 @@ def should_take_food(tile, inventory):
         return True
     return False
 
+def should_skip_food_when_full(tile, inventory):
+
+    if "food" not in tile:
+        return False
+    return inventory.get("food", 0) > 12
+
 def should_collect_stone(tile):
 
     if count_visible_item(tile, "linemate") > 0:
@@ -450,6 +456,9 @@ def main():
                 continue
             if should_take_thystame_first(tile, inventory):
                 send_command_to_server(server_connection, "Take thystame")
+                continue
+            if should_skip_food_when_full(tile, inventory):
+                send_command_to_server(server_connection, "Forward")
                 continue
             if should_take_food(tile, inventory):
                 send_command_to_server(server_connection, "Take food")
