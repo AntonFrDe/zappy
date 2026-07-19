@@ -301,7 +301,18 @@ def should_take_deraumere_first(tile, inventory):
         return False
     if count_visible_item(tile, "player") > 0:
         return False
+
     return True
+
+def should_take_guarded_stone(tile, inventory, resource, max_count):
+
+    if resource not in tile or inventory.get(resource, 0) > max_count:
+        return False
+
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+
+    return count_visible_item(tile, "player") == 0
 
 def should_take_sibur_first(tile, inventory):
 
@@ -311,33 +322,16 @@ def should_take_sibur_first(tile, inventory):
         return False
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
-    if count_visible_item(tile, "player") > 0:
-        return False
-    return True
+
+    return should_take_guarded_stone(tile, inventory, "sibur", 1)
 
 def should_take_mendiane_first(tile, inventory):
 
-    if "mendiane" not in tile:
-        return False
-    if inventory.get("mendiane", 0) > 1:
-        return False
-    if "food" in tile and inventory.get("food", 0) < 5:
-        return False
-    if count_visible_item(tile, "player") > 0:
-        return False
-    return True
+    return should_take_guarded_stone(tile, inventory, "mendiane", 1)
 
 def should_take_phiras_first(tile, inventory):
 
-    if "phiras" not in tile:
-        return False
-    if inventory.get("phiras", 0) > 0:
-        return False
-    if "food" in tile and inventory.get("food", 0) < 5:
-        return False
-    if count_visible_item(tile, "player") > 0:
-        return False
-    return True
+    return should_take_guarded_stone(tile, inventory, "phiras", 0)
 
 def should_take_thystame_first(tile, inventory):
     if "thystame" not in tile:
@@ -388,6 +382,7 @@ def try_create_team_slot(server_connection, inventory, tile):
     return True
 
 def wait_before_incantation(server_connection, inventory, look, tile):
+
     if inventory.get("food", 0) < 2 and "food" in tile:
         send_command_to_server(server_connection, "Take food")
         return
@@ -403,6 +398,7 @@ def wait_before_incantation(server_connection, inventory, look, tile):
     if inventory.get("linemate", 0) < 1 or inventory.get("food", 0) < 2:
         send_command_to_server(server_connection, choose_exploration_command(tile))
         return
+
     send_command_to_server(server_connection, "Look")
 
 def main():
