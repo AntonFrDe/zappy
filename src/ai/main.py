@@ -3,6 +3,9 @@ import socket
 import sys
 from random import choice
 
+RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur",
+    "mendiane", "phiras", "thystame"]
+
 def read_and_get_arguments(argument_type, default=None):
 
     if argument_type in sys.argv:
@@ -55,7 +58,7 @@ def keep_player_alive(server_connection):
         return False
 
     look = send_command_to_server(server_connection, "Look")
-    tile = look.strip("[]").split(",")[0].split()
+    tile = get_current_tile(look)
 
     if "food" in tile:
         send_command_to_server(server_connection, "Take food")
@@ -67,16 +70,17 @@ def keep_player_alive(server_connection):
 
 def collect_visible_resource(server_connection, tile):
 
-    for resource in ["linemate", "deraumere",
-        "sibur",
-        "mendiane",
-        "phiras", "thystame",]:
+    for resource in RESOURCE_PRIORITY:
 
         if resource in tile:
             send_command_to_server(server_connection, "Take " + resource)
             return True
 
     return False
+
+def get_current_tile(look):
+
+    return look.strip("[]").split(",")[0].split()
 
 def count_visible_item(tile, item):
 
@@ -338,6 +342,10 @@ def should_take_phiras_first(tile, inventory):
         return False
     if inventory.get("phiras", 0) > 0:
         return False
+    if "food" in tile and inventory.get("food", 0) < 5:
+        return False
+    if count_visible_item(tile, "player") > 0:
+        return False
     return True
 
 def should_take_thystame_first(tile, inventory):
@@ -422,7 +430,7 @@ def main():
             if keep_player_alive(server_connection):
                 continue
             look = send_command_to_server(server_connection, "Look")
-            tile = look.strip("[]").split(",")[0].split()
+            tile = get_current_tile(look)
 
             inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
             if should_wait_before_incantation(inventory):
