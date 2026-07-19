@@ -374,19 +374,30 @@ def try_create_team_slot(server_connection, inventory, tile):
     send_command_to_server(server_connection, "Fork")
     return True
 
-def wait_before_incantation(server_connection, inventory, look, tile):
+def take_needed_item_on_tile(server_connection, inventory, tile):
 
     if inventory.get("food", 0) < 2 and "food" in tile:
         send_command_to_server(server_connection, "Take food")
-        return
+        return True
     if inventory.get("linemate", 0) < 1 and "linemate" in tile:
         send_command_to_server(server_connection, "Take linemate")
+        return True
+    return False
+
+def move_toward_missing_item(server_connection, inventory, look, resource, count):
+
+    if inventory.get(resource, 0) >= count or resource not in look:
+        return False
+    send_command_to_server(server_connection, "Forward")
+    return True
+
+def wait_before_incantation(server_connection, inventory, look, tile):
+
+    if take_needed_item_on_tile(server_connection, inventory, tile):
         return
-    if inventory.get("linemate", 0) < 1 and "linemate" in look:
-        send_command_to_server(server_connection, "Forward")
+    if move_toward_missing_item(server_connection, inventory, look, "linemate", 1):
         return
-    if inventory.get("food", 0) < 2 and "food" in look:
-        send_command_to_server(server_connection, "Forward")
+    if move_toward_missing_item(server_connection, inventory, look, "food", 2):
         return
     if inventory.get("linemate", 0) < 1 or inventory.get("food", 0) < 2:
         send_command_to_server(server_connection, choose_exploration_command(tile))
