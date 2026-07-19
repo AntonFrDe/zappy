@@ -3,8 +3,9 @@ import socket
 import sys
 from random import choice
 
-RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur",
-    "mendiane", "phiras", "thystame"]
+RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"]
+RARE_STONES = ["sibur", "mendiane", "phiras", "thystame"]
+FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
 
 def read_and_get_arguments(argument_type, default=None):
 
@@ -84,14 +85,7 @@ def get_current_tile(look):
 
 def count_visible_item(tile, item):
 
-    i = 0
-
-    for y in tile:
-
-        if y == item:
-            i = i + 1
-
-    return i
+    return tile.count(item)
 
 def choose_exploration_command(tile):
 
@@ -143,7 +137,7 @@ def should_skip_food_when_full(tile, inventory):
 
     if "food" not in tile:
         return False
-    return inventory.get("food", 0) > 12
+    return inventory.get("food", 0) > FOOD_FULL_LIMIT
 
 def should_collect_stone(tile):
 
@@ -234,20 +228,17 @@ def should_leave_player_only_tile(tile):
     return len(tile) == player_count
 
 def should_collect_rare_stone(tile):
-    if "sibur" in tile:
-        return True
 
-    if "mendiane" in tile:
-        return True
-    if "phiras" in tile or "thystame" in tile:
-        return True
+    for resource in RARE_STONES:
+        if resource in tile:
+            return True
     return False
 
 def should_ignore_egg_when_hungry(tile, inventory):
 
     if "egg" not in tile or "food" in tile:
         return False
-    return inventory.get("food", 0) < 4
+    return inventory.get("food", 0) < FOOD_LOW_LIMIT
 
 def should_follow_egg(tile):
     if "egg" in tile:
@@ -371,12 +362,11 @@ def should_avoid_busy_resource_tile(tile):
 
 def should_seek_food_before_rare_stone(tile, inventory):
 
-    rare_stones = ["sibur", "mendiane", "phiras", "thystame"]
-    if inventory.get("food", 0) >= 4:
+    if inventory.get("food", 0) >= FOOD_LOW_LIMIT:
         return False
     if "food" in tile or count_visible_item(tile, "player") > 0:
         return False
-    for resource in rare_stones:
+    for resource in RARE_STONES:
         if resource in tile:
             return True
     return False
