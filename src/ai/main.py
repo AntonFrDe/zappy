@@ -5,6 +5,7 @@ from random import choice
 
 RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"]
 RARE_STONES = ["sibur", "mendiane", "phiras", "thystame"]
+EARLY_STONE_DISTRACTIONS = ["deraumere", "sibur"]
 FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
 
 def read_and_get_arguments(argument_type, default=None):
@@ -289,20 +290,11 @@ def should_seek_linemate_before_other_stones(tile, inventory):
         return False
     if count_visible_item(tile, "player") > 0:
         return False
-    return "deraumere" in tile or "sibur" in tile
+    return any(resource in tile for resource in EARLY_STONE_DISTRACTIONS)
 
 def should_take_deraumere_first(tile, inventory):
 
-    if "deraumere" not in tile:
-        return False
-    if inventory.get("deraumere", 0) > 1:
-        return False
-    if "food" in tile and inventory.get("food", 0) < 5:
-        return False
-    if count_visible_item(tile, "player") > 0:
-        return False
-
-    return True
+    return should_take_guarded_stone(tile, inventory, "deraumere", 1)
 
 def should_take_guarded_stone(tile, inventory, resource, max_count):
 
@@ -316,13 +308,6 @@ def should_take_guarded_stone(tile, inventory, resource, max_count):
 
 def should_take_sibur_first(tile, inventory):
 
-    if "sibur" not in tile:
-        return False
-    if inventory.get("sibur", 0) > 1:
-        return False
-    if "food" in tile and inventory.get("food", 0) < 5:
-        return False
-
     return should_take_guarded_stone(tile, inventory, "sibur", 1)
 
 def should_take_mendiane_first(tile, inventory):
@@ -334,13 +319,8 @@ def should_take_phiras_first(tile, inventory):
     return should_take_guarded_stone(tile, inventory, "phiras", 0)
 
 def should_take_thystame_first(tile, inventory):
-    if "thystame" not in tile:
-        return False
-    if inventory.get("thystame", 0) > 0:
-        return False
-    if count_visible_item(tile, "player") > 0:
-        return False
-    return True
+
+    return should_take_guarded_stone(tile, inventory, "thystame", 0)
 
 def should_avoid_busy_resource_tile(tile):
 
