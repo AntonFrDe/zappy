@@ -1,16 +1,48 @@
 #!/usr/bin/env python3
 import socket
 import sys
+from pathlib import Path
 from random import choice
 
-RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"]
-RARE_STONES = ["sibur", "mendiane", "phiras", "thystame"]
-EARLY_STONE_DISTRACTIONS = ["deraumere", "sibur"]
-GUARDED_STONE_LIMITS = {"sibur": 1, "mendiane": 1, "phiras": 0, "thystame": 0}
-FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
-SURVIVAL_MOVES = ["Forward", "Left", "Right"]
-EXPLORATION_TURNS = ["Left", "Right"]
-EXPLORATION_FORWARD_TARGETS = ["food", "linemate", "deraumere"]
+AI_DIR = Path(__file__).resolve().parent
+if str(AI_DIR) not in sys.path:
+    sys.path.insert(0, str(AI_DIR))
+
+from strategy import (
+    EXPLORATION_FORWARD_TARGETS,
+    EXPLORATION_TURNS,
+    RESOURCE_PRIORITY,
+    SURVIVAL_MOVES,
+    can_try_level_two,
+    count_visible_item,
+    get_current_tile,
+    get_guarded_resource_to_take,
+    parse_inventory_response,
+    should_avoid_busy_resource_tile,
+    should_check_inventory,
+    should_collect_rare_stone,
+    should_collect_stone,
+    should_follow_egg,
+    should_ignore_egg_when_hungry,
+    should_leave_player_only_tile,
+    should_seek_food_before_rare_stone,
+    should_seek_linemate_before_other_stones,
+    should_skip_extra_stone,
+    should_skip_food_when_full,
+    should_take_deraumere_first,
+    should_take_extra_food,
+    should_take_food,
+    should_take_guarded_stone,
+    should_take_linemate_first,
+    should_take_mendiane_first,
+    should_take_phiras_first,
+    should_take_sibur_first,
+    should_take_thystame_first,
+    should_turn_near_players,
+    should_turn_on_busy_tile,
+    should_wait_before_incantation,
+)
+
 
 def read_and_get_arguments(argument_type, default=None):
 
@@ -18,6 +50,7 @@ def read_and_get_arguments(argument_type, default=None):
         return sys.argv[sys.argv.index(argument_type) + 1]
 
     return default
+
 
 def receive_response_from_server(server_connection):
 
@@ -36,25 +69,13 @@ def receive_response_from_server(server_connection):
 
     return normal_text
 
+
 def send_command_to_server(server_connection, command):
 
     server_connection.sendall((command + "\n").encode())
 
     return receive_response_from_server(server_connection)
 
-def parse_inventory_response(response):
-
-    inventory = {}
-    items = response.strip("[]").split(",")
-
-    for item in items:
-
-        parts = item.split()
-
-        if len(parts) == 2 and parts[1].isdigit():
-            inventory[parts[0]] = int(parts[1])
-
-    return inventory
 
 def keep_player_alive(server_connection):
 
@@ -74,6 +95,7 @@ def keep_player_alive(server_connection):
 
     return True
 
+
 def collect_visible_resource(server_connection, tile):
 
     for resource in RESOURCE_PRIORITY:
@@ -84,13 +106,6 @@ def collect_visible_resource(server_connection, tile):
 
     return False
 
-def get_current_tile(look):
-
-    return look.strip("[]").split(",")[0].split()
-
-def count_visible_item(tile, item):
-
-    return tile.count(item)
 
 def choose_exploration_command(tile):
 
@@ -105,6 +120,7 @@ def choose_exploration_command(tile):
         return choice(EXPLORATION_TURNS)
 
     return choice(SURVIVAL_MOVES)
+
 
 def try_first_incantation(server_connection, inventory, tile):
 
@@ -122,58 +138,6 @@ def try_first_incantation(server_connection, inventory, tile):
             return True
     return False
 
-def should_take_food(tile, inventory):
-
-    food_count = count_visible_item(tile, "food")
-    if food_count == 0:
-        return False
-    if inventory.get("food", 0) < 10:
-        return True
-    if food_count > 2:
-        return True
-    if len(tile) == food_count:
-        return True
-    return False
-
-def should_take_extra_food(tile):
-
-    return count_visible_item(tile, "food") > 1
-
-def should_skip_food_when_full(tile, inventory):
-
-    if "food" not in tile:
-        return False
-    return inventory.get("food", 0) > FOOD_FULL_LIMIT
-
-def should_collect_stone(tile):
-
-    if count_visible_item(tile, "linemate") > 0:
-        return True
-    if count_visible_item(tile, "deraumere") > 0:
-        return True
-    return False
-
-def should_wait_before_incantation(inventory):
-
-    food, linemate = inventory.get("food", 0), inventory.get("linemate", 0)
-    if food == 0:
-        return True
-    if food < 2:
-        return True
-    if linemate < 1:
-        return True
-    if food < 4 and linemate == 0:
-        return True
-    return False
-
-def can_try_level_two(inventory, tile):
-    if inventory.get("food", 0) < 2:
-        return False
-    if inventory.get("linemate", 0) > 0:
-        return True
-    if "linemate" in tile:
-        return True
-    return False
 
 def try_level_two_incantation(server_connection, inventory, tile):
     if not can_try_level_two(inventory, tile):
@@ -183,31 +147,28 @@ def try_level_two_incantation(server_connection, inventory, tile):
         return True
     return try_first_incantation(server_connection, inventory, tile)
 
+
 def move_when_food_is_low(server_connection, inventory, tile):
 
     if inventory.get("food", 0) >= 3:
         return False
+
     if "food" in tile:
         send_command_to_server(server_connection, "Take food")
         return True
+
     send_command_to_server(server_connection, "Forward")
     return True
+
 
 def turn_on_empty_tile(server_connection, tile):
 
     if len(tile) != 0:
         return False
+
     send_command_to_server(server_connection, "Right")
     return True
 
-def should_skip_extra_stone(inventory, tile):
-    if inventory.get("linemate", 0) > 1 and "linemate" in tile:
-        return True
-    if inventory.get("deraumere", 0) > 1 and "deraumere" in tile:
-        return True
-    if inventory.get("sibur", 0) > 1 and "sibur" in tile:
-        return True
-    return False
 
 def shold_move_after_look(server_connection, tile):
 
@@ -219,50 +180,6 @@ def shold_move_after_look(server_connection, tile):
     send_command_to_server(server_connection, "Forward")
     return True
 
-def should_turn_near_players(tile):
-
-    if count_visible_item(tile, "player") > 1:
-        return True
-
-    return False
-
-def should_leave_player_only_tile(tile):
-
-    player_count = count_visible_item(tile, "player")
-    if player_count == 0:
-        return False
-    return len(tile) == player_count
-
-def should_collect_rare_stone(tile):
-
-    for resource in RARE_STONES:
-        if resource in tile:
-            return True
-    return False
-
-def should_ignore_egg_when_hungry(tile, inventory):
-
-    if "egg" not in tile or "food" in tile:
-        return False
-    return inventory.get("food", 0) < FOOD_LOW_LIMIT
-
-def should_follow_egg(tile):
-    if "egg" in tile:
-        return True
-    return False
-
-def should_check_inventory(tile):
-    if count_visible_item(tile, "player") > 0 and "food" not in tile:
-        return True
-    return False
-
-def should_turn_on_busy_tile(tile):
-
-    if len(tile) > 4:
-        return True
-    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
-        return True
-    return False
 
 def if_low_food_seek_food(server_connection, inventory, tile):
 
@@ -280,83 +197,6 @@ def if_low_food_seek_food(server_connection, inventory, tile):
         return True
     return False
 
-def should_take_linemate_first(tile):
-    if "linemate" not in tile:
-        return False
-    if "food" in tile:
-        return False
-    return True
-
-def should_seek_linemate_before_other_stones(tile, inventory):
-
-    if inventory.get("linemate", 0) > 0:
-        return False
-    if "linemate" in tile or "food" in tile:
-        return False
-    if count_visible_item(tile, "player") > 0:
-        return False
-    return any(resource in tile for resource in EARLY_STONE_DISTRACTIONS)
-
-def should_take_deraumere_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "deraumere", 1)
-
-def should_take_guarded_stone(tile, inventory, resource, max_count):
-
-    if resource not in tile or inventory.get(resource, 0) > max_count:
-        return False
-
-    if "food" in tile and inventory.get("food", 0) < 5:
-        return False
-
-    return count_visible_item(tile, "player") == 0
-
-def get_guarded_resource_to_take(tile, inventory):
-
-    for resource in RARE_STONES:
-        limit = GUARDED_STONE_LIMITS[resource]
-        if should_take_guarded_stone(tile, inventory, resource, limit):
-            return resource
-    return None
-
-def should_take_sibur_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "sibur", 1)
-
-def should_take_mendiane_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "mendiane", 1)
-
-def should_take_phiras_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "phiras", 0)
-
-def should_take_thystame_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "thystame", 0)
-
-def should_avoid_busy_resource_tile(tile):
-
-    if count_visible_item(tile, "player") == 0:
-        return False
-    if "linemate" in tile:
-        return True
-    if "deraumere" in tile:
-        return True
-    if "sibur" in tile or "mendiane" in tile:
-        return True
-    return False
-
-def should_seek_food_before_rare_stone(tile, inventory):
-
-    if inventory.get("food", 0) >= FOOD_LOW_LIMIT:
-        return False
-    if "food" in tile or count_visible_item(tile, "player") > 0:
-        return False
-    for resource in RARE_STONES:
-        if resource in tile:
-            return True
-    return False
 
 def try_create_team_slot(server_connection, inventory, tile):
 
@@ -374,6 +214,7 @@ def try_create_team_slot(server_connection, inventory, tile):
     send_command_to_server(server_connection, "Fork")
     return True
 
+
 def take_needed_item_on_tile(server_connection, inventory, tile):
 
     if inventory.get("food", 0) < 2 and "food" in tile:
@@ -384,12 +225,14 @@ def take_needed_item_on_tile(server_connection, inventory, tile):
         return True
     return False
 
+
 def move_toward_missing_item(server_connection, inventory, look, resource, count):
 
     if inventory.get(resource, 0) >= count or resource not in look:
         return False
     send_command_to_server(server_connection, "Forward")
     return True
+
 
 def wait_before_incantation(server_connection, inventory, look, tile):
 
@@ -405,6 +248,7 @@ def wait_before_incantation(server_connection, inventory, look, tile):
 
     send_command_to_server(server_connection, "Look")
 
+
 def do_default_action(server_connection, tile):
 
     if "food" in tile:
@@ -413,6 +257,94 @@ def do_default_action(server_connection, tile):
     if collect_visible_resource(server_connection, tile):
         return
     send_command_to_server(server_connection, choose_exploration_command(tile))
+
+
+def run_ai_loop(server_connection):
+
+    while True:
+        if keep_player_alive(server_connection):
+            continue
+        look = send_command_to_server(server_connection, "Look")
+        tile = get_current_tile(look)
+
+        inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+        if should_wait_before_incantation(inventory):
+            wait_before_incantation(server_connection, inventory, look, tile)
+            continue
+        if len(tile) == 0:
+            send_command_to_server(server_connection, "Look")
+        if turn_on_empty_tile(server_connection, tile):
+            continue
+        if move_when_food_is_low(server_connection, inventory, tile):
+            continue
+        if try_level_two_incantation(server_connection, inventory, tile):
+            continue
+        if try_create_team_slot(server_connection, inventory, tile):
+            continue
+        if if_low_food_seek_food(server_connection, inventory, tile):
+            continue
+        if should_avoid_busy_resource_tile(tile):
+            send_command_to_server(server_connection, "Right")
+            continue
+        if should_leave_player_only_tile(tile):
+            send_command_to_server(server_connection, "Right")
+            continue
+        if should_take_linemate_first(tile):
+            send_command_to_server(server_connection, "Take linemate")
+            continue
+        if should_seek_linemate_before_other_stones(tile, inventory):
+            send_command_to_server(server_connection, "Forward")
+            continue
+        if should_take_deraumere_first(tile, inventory):
+            send_command_to_server(server_connection, "Take deraumere")
+            continue
+        if should_seek_food_before_rare_stone(tile, inventory):
+            send_command_to_server(server_connection, "Forward")
+            continue
+        guarded_resource = get_guarded_resource_to_take(tile, inventory)
+        if guarded_resource is not None:
+            send_command_to_server(server_connection, "Take " + guarded_resource)
+            continue
+        if should_skip_food_when_full(tile, inventory):
+            send_command_to_server(server_connection, "Forward")
+            continue
+        if should_take_food(tile, inventory):
+            send_command_to_server(server_connection, "Take food")
+            continue
+        if should_skip_extra_stone(inventory, tile):
+            send_command_to_server(server_connection, "Forward")
+            continue
+        if shold_move_after_look(server_connection, tile):
+            continue
+        if should_take_extra_food(tile):
+            send_command_to_server(server_connection, "Take food")
+            continue
+        if should_collect_stone(tile):
+            collect_visible_resource(server_connection, tile)
+            continue
+        if should_collect_rare_stone(tile):
+            collect_visible_resource(server_connection, tile)
+            continue
+        if should_ignore_egg_when_hungry(tile, inventory):
+            send_command_to_server(server_connection, "Forward")
+            continue
+        if should_follow_egg(tile):
+            send_command_to_server(server_connection, "Left")
+            continue
+        if should_check_inventory(tile):
+            send_command_to_server(server_connection, "Inventory")
+        if should_turn_on_busy_tile(tile):
+            send_command_to_server(server_connection, "Right")
+            continue
+        if should_turn_near_players(tile):
+            send_command_to_server(server_connection, "Left")
+            continue
+        player_count = count_visible_item(tile, "player")
+        if player_count > 1:
+            send_command_to_server(server_connection, "Right")
+            continue
+        do_default_action(server_connection, tile)
+
 
 def main():
 
@@ -424,90 +356,8 @@ def main():
         receive_response_from_server(server_connection)
         send_command_to_server(server_connection, team_argument)
         receive_response_from_server(server_connection)
+        run_ai_loop(server_connection)
 
-        while True:
-            if keep_player_alive(server_connection):
-                continue
-            look = send_command_to_server(server_connection, "Look")
-            tile = get_current_tile(look)
-
-            inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
-            if should_wait_before_incantation(inventory):
-                wait_before_incantation(server_connection, inventory, look, tile)
-                continue
-            if len(tile) == 0:
-                send_command_to_server(server_connection, "Look")
-            if turn_on_empty_tile(server_connection, tile):
-                continue
-            if move_when_food_is_low(server_connection, inventory, tile):
-                continue
-            if try_level_two_incantation(server_connection, inventory, tile):
-                continue
-            if try_create_team_slot(server_connection, inventory, tile):
-                continue
-            if if_low_food_seek_food(server_connection, inventory, tile):
-                continue
-            if should_avoid_busy_resource_tile(tile):
-                send_command_to_server(server_connection, "Right")
-                continue
-            if should_leave_player_only_tile(tile):
-                send_command_to_server(server_connection, "Right")
-                continue
-            if should_take_linemate_first(tile):
-                send_command_to_server(server_connection, "Take linemate")
-                continue
-            if should_seek_linemate_before_other_stones(tile, inventory):
-                send_command_to_server(server_connection, "Forward")
-                continue
-            if should_take_deraumere_first(tile, inventory):
-                send_command_to_server(server_connection, "Take deraumere")
-                continue
-            if should_seek_food_before_rare_stone(tile, inventory):
-                send_command_to_server(server_connection, "Forward")
-                continue
-            guarded_resource = get_guarded_resource_to_take(tile, inventory)
-            if guarded_resource is not None:
-                send_command_to_server(server_connection, "Take " + guarded_resource)
-                continue
-            if should_skip_food_when_full(tile, inventory):
-                send_command_to_server(server_connection, "Forward")
-                continue
-            if should_take_food(tile, inventory):
-                send_command_to_server(server_connection, "Take food")
-                continue
-            if should_skip_extra_stone(inventory, tile):
-                send_command_to_server(server_connection, "Forward")
-                continue
-            if shold_move_after_look(server_connection, tile):
-                continue
-            if should_take_extra_food(tile):
-                send_command_to_server(server_connection, "Take food")
-                continue
-            if should_collect_stone(tile):
-                collect_visible_resource(server_connection, tile)
-                continue
-            if should_collect_rare_stone(tile):
-                collect_visible_resource(server_connection, tile)
-                continue
-            if should_ignore_egg_when_hungry(tile, inventory):
-                send_command_to_server(server_connection, "Forward")
-                continue
-            if should_follow_egg(tile):
-                send_command_to_server(server_connection, "Left")
-                continue
-            if should_check_inventory(tile):
-                send_command_to_server(server_connection, "Inventory")
-            if should_turn_on_busy_tile(tile):
-                send_command_to_server(server_connection, "Right")
-                continue
-            if should_turn_near_players(tile):
-                send_command_to_server(server_connection, "Left")
-                continue
-            player_count = count_visible_item(tile, "player")
-            if player_count > 1:
-                send_command_to_server(server_connection, "Right")
-                continue
-            do_default_action(server_connection, tile)
 
 if __name__ == "__main__":
     main()
