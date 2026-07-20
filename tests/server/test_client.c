@@ -80,6 +80,20 @@ Test(client, extract_line_strips_trailing_cr)
     client_destroy(client);
 }
 
+Test(client, extract_line_truncates_when_destination_too_small)
+{
+    client_t *client = client_create(-1);
+    char line[5];
+    const char *data = "0123456789\n";
+
+    memcpy(client->recv_buf, data, strlen(data));
+    client->recv_len = strlen(data);
+    cr_assert_eq(client_extract_line(client, line, sizeof(line)), 1);
+    cr_assert_str_eq(line, "0123");
+    cr_assert_eq(client->recv_len, (size_t)0);
+    client_destroy(client);
+}
+
 Test(client, push_and_pop_cmd_preserves_order)
 {
     client_t *client = client_create(-1);
