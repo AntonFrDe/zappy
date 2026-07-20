@@ -8,15 +8,13 @@ FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
 SURVIVAL_MOVES = ["Forward", "Left", "Right"]
 EXPLORATION_TURNS = ["Left", "Right"]
 EXPLORATION_FORWARD_TARGETS = ["food", "linemate", "deraumere"]
-INCANTATION_STONES = {
-    1: {"linemate": 1},
+INCANTATION_STONES = {1: {"linemate": 1},
     2: {"linemate": 1, "deraumere": 1, "sibur": 1},
     3: {"linemate": 2, "sibur": 1, "phiras": 2},
     4: {"linemate": 1, "deraumere": 1, "sibur": 2, "phiras": 1},
     5: {"linemate": 1, "deraumere": 2, "sibur": 1, "mendiane": 3},
     6: {"linemate": 1, "deraumere": 2, "sibur": 3, "phiras": 1},
-    7: {"linemate": 2, "deraumere": 2, "sibur": 2, "mendiane": 2, "phiras": 2, "thystame": 1},
-}
+    7: {"linemate": 2, "deraumere": 2, "sibur": 2, "mendiane": 2, "phiras": 2, "thystame": 1},}
 
 
 def parse_inventory_response(response):
@@ -115,6 +113,7 @@ def should_wait_before_incantation(inventory):
 def has_required_stones_for_level(level, inventory, tile):
 
     requirements = INCANTATION_STONES.get(level)
+
     if requirements is None:
         return False
     for resource, count in requirements.items():
