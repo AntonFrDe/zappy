@@ -11,6 +11,7 @@ if str(AI_DIR) not in sys.path:
 from strategy import (
     EXPLORATION_FORWARD_TARGETS,
     EXPLORATION_TURNS,
+    INCANTATION_STONES,
     RESOURCE_PRIORITY,
     SURVIVAL_MOVES,
     can_try_level_two,
@@ -42,6 +43,8 @@ from strategy import (
     should_turn_on_busy_tile,
     should_wait_before_incantation,
 )
+
+PLAYER_LEVEL = 1
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -98,13 +101,22 @@ def keep_player_alive(server_connection):
 
 def collect_visible_resource(server_connection, tile):
 
-    for resource in RESOURCE_PRIORITY:
+    for resource in get_resource_priority():
 
         if resource in tile:
             send_command_to_server(server_connection, "Take " + resource)
             return True
 
     return False
+
+
+def get_resource_priority():
+
+    needed_resources = list(INCANTATION_STONES.get(PLAYER_LEVEL, {}).keys())
+    return needed_resources + [
+        resource for resource in RESOURCE_PRIORITY
+        if resource not in needed_resources
+    ]
 
 
 def choose_exploration_command(tile):
@@ -122,19 +134,40 @@ def choose_exploration_command(tile):
     return choice(SURVIVAL_MOVES)
 
 
+def update_player_level(response):
+
+    global PLAYER_LEVEL
+
+    if not response.startswith("Current level:"):
+        return False
+    PLAYER_LEVEL = int(response.split(":")[1].strip())
+    return True
+
+
+def place_missing_stones_for_level(server_connection, inventory, tile, level):
+
+    for resource, count in INCANTATION_STONES.get(level, {}).items():
+        missing = count - count_visible_item(tile, resource)
+        while missing > 0:
+            if inventory.get(resource, 0) <= 0:
+                return False
+            reponse = send_command_to_server(server_connection, "Set " + resource)
+            if reponse != "ok":
+                return False
+            inventory[resource] -= 1
+            missing -= 1
+    return True
+
+
 def try_first_incantation(server_connection, inventory, tile):
 
-    if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
+    if not place_missing_stones_for_level(server_connection, inventory, tile, 1):
         return False
-    if "linemate" not in tile:
-        reponse = send_command_to_server(server_connection, "Set linemate")
-        if reponse != "ok":
-            return False
     reponse = send_command_to_server(server_connection, "Incantation")
 
     if reponse == "Elevation underway":
         reponse = receive_response_from_server(server_connection)
-        if reponse.startswith("Current level:"):
+        if update_player_level(reponse):
             return True
     return False
 
@@ -349,7 +382,7 @@ def run_ai_loop(server_connection):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
             continue
-        if try_level_two_incantation(server_connection, inventory, tile):
+        if PLAYER_LEVEL == 1 and try_level_two_incantation(server_connection, inventory, tile):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
