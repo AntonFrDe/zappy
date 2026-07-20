@@ -3,6 +3,7 @@
     #include <stdint.h>
     #include <stdbool.h>
     #include <stddef.h>
+    #include <time.h>
 
     #define CLIENT_RECV_BUF_SIZE 4096
     #define CLIENT_MAX_QUEUED_CMDS 10
@@ -19,6 +20,9 @@
         int team_index;
         char *cmd_queue[CLIENT_MAX_QUEUED_CMDS];
         int cmd_count;
+        bool busy;              // une commande est en cours d'execution
+        struct timespec ready_at; // instant ou elle se termine
+        char *executing_cmd;    // commande en cours (possede la string)
     } client_t;
 
     client_t *client_create(int fd);
