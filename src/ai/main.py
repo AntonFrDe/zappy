@@ -300,6 +300,17 @@ def take_guarded_resource_step(server_connection, inventory, tile):
     return True
 
 
+def handle_visible_food_step(server_connection, inventory, tile):
+
+    if should_skip_food_when_full(tile, inventory):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    if should_take_food(tile, inventory):
+        send_command_to_server(server_connection, "Take food")
+        return True
+    return False
+
+
 def run_ai_loop(server_connection):
 
     while True:
@@ -339,11 +350,7 @@ def run_ai_loop(server_connection):
             continue
         if take_guarded_resource_step(server_connection, inventory, tile):
             continue
-        if should_skip_food_when_full(tile, inventory):
-            send_command_to_server(server_connection, "Forward")
-            continue
-        if should_take_food(tile, inventory):
-            send_command_to_server(server_connection, "Take food")
+        if handle_visible_food_step(server_connection, inventory, tile):
             continue
         if should_skip_extra_stone(inventory, tile):
             send_command_to_server(server_connection, "Forward")
