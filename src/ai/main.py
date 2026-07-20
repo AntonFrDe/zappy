@@ -361,7 +361,7 @@ def run_ai_loop(server_connection):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
             continue
-        if try_level_two_incantation(server_connection, inventory, tile):
+        if PLAYER_LEVEL == 1 and try_level_two_incantation(server_connection, inventory, tile):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
