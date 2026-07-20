@@ -4,6 +4,7 @@
     #include "struct.h"
     #include "error.h"
     #include "client.h"
+    #include "map.h"
     #include "network.h"
     #include <stdlib.h>
     #include <stdio.h>
