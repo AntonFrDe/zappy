@@ -249,6 +249,14 @@ def wait_before_incantation(server_connection, inventory, look, tile):
     send_command_to_server(server_connection, "Look")
 
 
+def prepare_incantation_step(server_connection, inventory, look, tile):
+
+    if not should_wait_before_incantation(inventory):
+        return False
+    wait_before_incantation(server_connection, inventory, look, tile)
+    return True
+
+
 def do_default_action(server_connection, tile):
 
     if "food" in tile:
@@ -257,6 +265,22 @@ def do_default_action(server_connection, tile):
     if collect_visible_resource(server_connection, tile):
         return
     send_command_to_server(server_connection, choose_exploration_command(tile))
+
+
+def handle_player_pressure_step(server_connection, tile):
+
+    if should_check_inventory(tile):
+        send_command_to_server(server_connection, "Inventory")
+    if should_turn_on_busy_tile(tile):
+        send_command_to_server(server_connection, "Right")
+        return True
+    if should_turn_near_players(tile):
+        send_command_to_server(server_connection, "Left")
+        return True
+    if count_visible_item(tile, "player") > 1:
+        send_command_to_server(server_connection, "Right")
+        return True
+    return False
 
 
 def run_ai_loop(server_connection):
@@ -268,8 +292,7 @@ def run_ai_loop(server_connection):
         tile = get_current_tile(look)
 
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
-        if should_wait_before_incantation(inventory):
-            wait_before_incantation(server_connection, inventory, look, tile)
+        if prepare_incantation_step(server_connection, inventory, look, tile):
             continue
         if len(tile) == 0:
             send_command_to_server(server_connection, "Look")
@@ -331,17 +354,7 @@ def run_ai_loop(server_connection):
         if should_follow_egg(tile):
             send_command_to_server(server_connection, "Left")
             continue
-        if should_check_inventory(tile):
-            send_command_to_server(server_connection, "Inventory")
-        if should_turn_on_busy_tile(tile):
-            send_command_to_server(server_connection, "Right")
-            continue
-        if should_turn_near_players(tile):
-            send_command_to_server(server_connection, "Left")
-            continue
-        player_count = count_visible_item(tile, "player")
-        if player_count > 1:
-            send_command_to_server(server_connection, "Right")
+        if handle_player_pressure_step(server_connection, tile):
             continue
         do_default_action(server_connection, tile)
 
