@@ -311,6 +311,14 @@ def handle_visible_food_step(server_connection, inventory, tile):
     return False
 
 
+def collect_visible_stone_step(server_connection, tile):
+
+    if not should_collect_stone(tile) and not should_collect_rare_stone(tile):
+        return False
+    collect_visible_resource(server_connection, tile)
+    return True
+
+
 def run_ai_loop(server_connection):
 
     while True:
@@ -360,11 +368,7 @@ def run_ai_loop(server_connection):
         if should_take_extra_food(tile):
             send_command_to_server(server_connection, "Take food")
             continue
-        if should_collect_stone(tile):
-            collect_visible_resource(server_connection, tile)
-            continue
-        if should_collect_rare_stone(tile):
-            collect_visible_resource(server_connection, tile)
+        if collect_visible_stone_step(server_connection, tile):
             continue
         if should_ignore_egg_when_hungry(tile, inventory):
             send_command_to_server(server_connection, "Forward")
