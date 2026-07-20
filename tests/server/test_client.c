@@ -67,6 +67,19 @@ Test(client, extract_line_returns_zero_without_newline)
     client_destroy(client);
 }
 
+Test(client, extract_line_strips_trailing_cr)
+{
+    client_t *client = client_create(-1);
+    char line[64];
+
+    memcpy(client->recv_buf, "Forward\r\n", 9);
+    client->recv_len = 9;
+    cr_assert_eq(client_extract_line(client, line, sizeof(line)), 1);
+    cr_assert_str_eq(line, "Forward");
+    cr_assert_eq(client->recv_len, (size_t)0);
+    client_destroy(client);
+}
+
 Test(client, push_and_pop_cmd_preserves_order)
 {
     client_t *client = client_create(-1);
