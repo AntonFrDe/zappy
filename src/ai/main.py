@@ -11,6 +11,7 @@ if str(AI_DIR) not in sys.path:
 from strategy import (
     EXPLORATION_FORWARD_TARGETS,
     EXPLORATION_TURNS,
+    INCANTATION_STONES,
     RESOURCE_PRIORITY,
     SURVIVAL_MOVES,
     can_try_level_two,
@@ -100,13 +101,22 @@ def keep_player_alive(server_connection):
 
 def collect_visible_resource(server_connection, tile):
 
-    for resource in RESOURCE_PRIORITY:
+    for resource in get_resource_priority():
 
         if resource in tile:
             send_command_to_server(server_connection, "Take " + resource)
             return True
 
     return False
+
+
+def get_resource_priority():
+
+    needed_resources = list(INCANTATION_STONES.get(PLAYER_LEVEL, {}).keys())
+    return needed_resources + [
+        resource for resource in RESOURCE_PRIORITY
+        if resource not in needed_resources
+    ]
 
 
 def choose_exploration_command(tile):
