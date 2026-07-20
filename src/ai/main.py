@@ -144,14 +144,25 @@ def update_player_level(response):
     return True
 
 
+def place_missing_stones_for_level(server_connection, inventory, tile, level):
+
+    for resource, count in INCANTATION_STONES.get(level, {}).items():
+        missing = count - count_visible_item(tile, resource)
+        while missing > 0:
+            if inventory.get(resource, 0) <= 0:
+                return False
+            reponse = send_command_to_server(server_connection, "Set " + resource)
+            if reponse != "ok":
+                return False
+            inventory[resource] -= 1
+            missing -= 1
+    return True
+
+
 def try_first_incantation(server_connection, inventory, tile):
 
-    if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
+    if not place_missing_stones_for_level(server_connection, inventory, tile, 1):
         return False
-    if "linemate" not in tile:
-        reponse = send_command_to_server(server_connection, "Set linemate")
-        if reponse != "ok":
-            return False
     reponse = send_command_to_server(server_connection, "Incantation")
 
     if reponse == "Elevation underway":
