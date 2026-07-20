@@ -291,6 +291,15 @@ def avoid_crowded_tile_step(server_connection, tile):
     return True
 
 
+def take_guarded_resource_step(server_connection, inventory, tile):
+
+    guarded_resource = get_guarded_resource_to_take(tile, inventory)
+    if guarded_resource is None:
+        return False
+    send_command_to_server(server_connection, "Take " + guarded_resource)
+    return True
+
+
 def run_ai_loop(server_connection):
 
     while True:
@@ -328,9 +337,7 @@ def run_ai_loop(server_connection):
         if should_seek_food_before_rare_stone(tile, inventory):
             send_command_to_server(server_connection, "Forward")
             continue
-        guarded_resource = get_guarded_resource_to_take(tile, inventory)
-        if guarded_resource is not None:
-            send_command_to_server(server_connection, "Take " + guarded_resource)
+        if take_guarded_resource_step(server_connection, inventory, tile):
             continue
         if should_skip_food_when_full(tile, inventory):
             send_command_to_server(server_connection, "Forward")
