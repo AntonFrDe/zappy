@@ -200,11 +200,7 @@ def if_low_food_seek_food(server_connection, inventory, tile):
 
 def try_create_team_slot(server_connection, inventory, tile):
 
-    if can_try_level_two(inventory, tile):
-        return False
     if inventory.get("food", 0) < 8:
-        return False
-    if inventory.get("linemate", 0) < 1:
         return False
     reponse = send_command_to_server(server_connection, "Connect_nbr")
     if not reponse.isdigit():
