@@ -200,11 +200,7 @@ def if_low_food_seek_food(server_connection, inventory, tile):
 
 def try_create_team_slot(server_connection, inventory, tile):
 
-    if can_try_level_two(inventory, tile):
-        return False
     if inventory.get("food", 0) < 8:
-        return False
-    if inventory.get("linemate", 0) < 1:
         return False
     reponse = send_command_to_server(server_connection, "Connect_nbr")
     if not reponse.isdigit():
@@ -283,6 +279,59 @@ def handle_player_pressure_step(server_connection, tile):
     return False
 
 
+def avoid_crowded_tile_step(server_connection, tile):
+
+    if not should_avoid_busy_resource_tile(tile) and not should_leave_player_only_tile(tile):
+        return False
+    send_command_to_server(server_connection, "Right")
+    return True
+
+
+def take_guarded_resource_step(server_connection, inventory, tile):
+
+    guarded_resource = get_guarded_resource_to_take(tile, inventory)
+    if guarded_resource is None:
+        return False
+    send_command_to_server(server_connection, "Take " + guarded_resource)
+    return True
+
+
+def handle_visible_food_step(server_connection, inventory, tile):
+
+    if should_skip_food_when_full(tile, inventory):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    if should_take_food(tile, inventory):
+        send_command_to_server(server_connection, "Take food")
+        return True
+    return False
+
+
+def collect_visible_stone_step(server_connection, tile):
+
+    if not should_collect_stone(tile) and not should_collect_rare_stone(tile):
+        return False
+    collect_visible_resource(server_connection, tile)
+    return True
+
+
+def handle_early_resource_step(server_connection, inventory, tile):
+
+    if should_take_linemate_first(tile):
+        send_command_to_server(server_connection, "Take linemate")
+        return True
+    if should_seek_linemate_before_other_stones(tile, inventory):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    if should_take_deraumere_first(tile, inventory):
+        send_command_to_server(server_connection, "Take deraumere")
+        return True
+    if should_seek_food_before_rare_stone(tile, inventory):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    return False
+
+
 def run_ai_loop(server_connection):
 
     while True:
@@ -306,33 +355,13 @@ def run_ai_loop(server_connection):
             continue
         if if_low_food_seek_food(server_connection, inventory, tile):
             continue
-        if should_avoid_busy_resource_tile(tile):
-            send_command_to_server(server_connection, "Right")
+        if avoid_crowded_tile_step(server_connection, tile):
             continue
-        if should_leave_player_only_tile(tile):
-            send_command_to_server(server_connection, "Right")
+        if handle_early_resource_step(server_connection, inventory, tile):
             continue
-        if should_take_linemate_first(tile):
-            send_command_to_server(server_connection, "Take linemate")
+        if take_guarded_resource_step(server_connection, inventory, tile):
             continue
-        if should_seek_linemate_before_other_stones(tile, inventory):
-            send_command_to_server(server_connection, "Forward")
-            continue
-        if should_take_deraumere_first(tile, inventory):
-            send_command_to_server(server_connection, "Take deraumere")
-            continue
-        if should_seek_food_before_rare_stone(tile, inventory):
-            send_command_to_server(server_connection, "Forward")
-            continue
-        guarded_resource = get_guarded_resource_to_take(tile, inventory)
-        if guarded_resource is not None:
-            send_command_to_server(server_connection, "Take " + guarded_resource)
-            continue
-        if should_skip_food_when_full(tile, inventory):
-            send_command_to_server(server_connection, "Forward")
-            continue
-        if should_take_food(tile, inventory):
-            send_command_to_server(server_connection, "Take food")
+        if handle_visible_food_step(server_connection, inventory, tile):
             continue
         if should_skip_extra_stone(inventory, tile):
             send_command_to_server(server_connection, "Forward")
@@ -342,11 +371,7 @@ def run_ai_loop(server_connection):
         if should_take_extra_food(tile):
             send_command_to_server(server_connection, "Take food")
             continue
-        if should_collect_stone(tile):
-            collect_visible_resource(server_connection, tile)
-            continue
-        if should_collect_rare_stone(tile):
-            collect_visible_resource(server_connection, tile)
+        if collect_visible_stone_step(server_connection, tile):
             continue
         if should_ignore_egg_when_hungry(tile, inventory):
             send_command_to_server(server_connection, "Forward")
