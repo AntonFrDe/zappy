@@ -283,6 +283,14 @@ def handle_player_pressure_step(server_connection, tile):
     return False
 
 
+def avoid_crowded_tile_step(server_connection, tile):
+
+    if not should_avoid_busy_resource_tile(tile) and not should_leave_player_only_tile(tile):
+        return False
+    send_command_to_server(server_connection, "Right")
+    return True
+
+
 def run_ai_loop(server_connection):
 
     while True:
@@ -306,11 +314,7 @@ def run_ai_loop(server_connection):
             continue
         if if_low_food_seek_food(server_connection, inventory, tile):
             continue
-        if should_avoid_busy_resource_tile(tile):
-            send_command_to_server(server_connection, "Right")
-            continue
-        if should_leave_player_only_tile(tile):
-            send_command_to_server(server_connection, "Right")
+        if avoid_crowded_tile_step(server_connection, tile):
             continue
         if should_take_linemate_first(tile):
             send_command_to_server(server_connection, "Take linemate")
