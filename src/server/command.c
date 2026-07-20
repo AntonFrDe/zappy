@@ -3,29 +3,67 @@
 #include <string.h>
 #include <time.h>
 
+typedef void (*command_handler_t)(server_t *server, client_t *client, const char *arg);
+
+static void handle_ok(server_t *server, client_t *client, const char *arg)
+{
+    (void)server;
+    (void)arg;
+    client_queue_send(client, "ok\n");
+}
+
+static void handle_look(server_t *server, client_t *client, const char *arg)
+{
+    (void)server;
+    (void)arg;
+    client_queue_send(client, "[]\n");
+}
+
+static void handle_inventory(server_t *server, client_t *client, const char *arg)
+{
+    (void)server;
+    (void)arg;
+    client_queue_send(client,
+        "[food 0, linemate 0, deraumere 0, sibur 0, "
+        "mendiane 0, phiras 0, thystame 0]\n");
+}
+
+static void handle_connect_nbr(server_t *server, client_t *client, const char *arg)
+{
+    (void)server;
+    (void)arg;
+    client_queue_send(client, "0\n");
+}
+
+static void handle_incantation(server_t *server, client_t *client, const char *arg)
+{
+    (void)server;
+    (void)arg;
+    client_queue_send(client, "Elevation underway\n");
+}
+
 typedef struct {
     const char *name;
     int cost;
-} command_cost_entry_t;
+    command_handler_t handler;
+} command_entry_t;
 
-// couts en unites de temps, cf tableau des commandes du sujet
-static const command_cost_entry_t COMMAND_COSTS[] = {
-    { "Forward", 7 },
-    { "Right", 7 },
-    { "Left", 7 },
-    { "Look", 7 },
-    { "Inventory", 1 },
-    { "Broadcast", 7 },
-    { "Connect_nbr", 0 },
-    { "Fork", 42 },
-    { "Eject", 7 },
-    { "Take", 7 },
-    { "Set", 7 },
-    { "Incantation", 300 },
+static const command_entry_t COMMANDS[] = {
+    { "Forward", 7, handle_ok },
+    { "Right", 7, handle_ok },
+    { "Left", 7, handle_ok },
+    { "Look", 7, handle_look },
+    { "Inventory", 1, handle_inventory },
+    { "Broadcast", 7, handle_ok },
+    { "Connect_nbr", 0, handle_connect_nbr },
+    { "Fork", 42, handle_ok },
+    { "Eject", 7, handle_ok },
+    { "Take", 7, handle_ok },
+    { "Set", 7, handle_ok },
+    { "Incantation", 300, handle_incantation },
 };
-#define COMMAND_COSTS_NB (sizeof(COMMAND_COSTS) / sizeof(COMMAND_COSTS[0]))
+#define COMMANDS_NB (sizeof(COMMANDS) / sizeof(COMMANDS[0]))
 
-// ne garde que le premier mot (le verbe), ex: "Take linemate" -> "Take"
 static void extract_verb(const char *cmd, char *verb, size_t verb_size)
 {
     size_t i = 0;
@@ -37,15 +75,29 @@ static void extract_verb(const char *cmd, char *verb, size_t verb_size)
     verb[i] = '\0';
 }
 
-int command_cost(const char *cmd)
+static const char *extract_arg(const char *cmd)
+{
+    const char *sp = strchr(cmd, ' ');
+
+    return sp != NULL ? sp + 1 : "";
+}
+
+static const command_entry_t *find_command(const char *cmd)
 {
     char verb[32];
 
     extract_verb(cmd, verb, sizeof(verb));
-    for (size_t i = 0; i < COMMAND_COSTS_NB; i++)
-        if (strcmp(COMMAND_COSTS[i].name, verb) == 0)
-            return COMMAND_COSTS[i].cost;
-    return -1;
+    for (size_t i = 0; i < COMMANDS_NB; i++)
+        if (strcmp(COMMANDS[i].name, verb) == 0)
+            return &COMMANDS[i];
+    return NULL;
+}
+
+int command_cost(const char *cmd)
+{
+    const command_entry_t *entry = find_command(cmd);
+
+    return entry != NULL ? entry->cost : -1;
 }
 
 static struct timespec compute_ready_at(int cost, uint16_t freq)
@@ -74,27 +126,27 @@ static bool is_ready(struct timespec ready_at)
 static void start_next_command(server_t *server, client_t *client)
 {
     char *cmd = client_pop_cmd(client);
-    int cost;
+    const command_entry_t *entry;
 
     if (cmd == NULL)
         return;
-    cost = command_cost(cmd);
-    if (cost < 0) {
+    entry = find_command(cmd);
+    if (entry == NULL) {
         client_queue_send(client, "ko\n");
         free(cmd);
         return;
     }
     client->executing_cmd = cmd;
-    client->ready_at = compute_ready_at(cost, server->cfg->freq);
+    client->ready_at = compute_ready_at(entry->cost, server->cfg->freq);
     client->busy = true;
 }
 
-static void finish_command(client_t *client)
+static void finish_command(server_t *server, client_t *client)
 {
-    // TODO: dispatch reel par commande (Forward/Look/Take/...).
-    // pour l'instant: accuse de reception generique, prouve que le
-    // mecanisme timing marche de bout en bout.
-    client_queue_send(client, "ok\n");
+    const command_entry_t *entry = find_command(client->executing_cmd);
+
+    if (entry != NULL)
+        entry->handler(server, client, extract_arg(client->executing_cmd));
     free(client->executing_cmd);
     client->executing_cmd = NULL;
     client->busy = false;
@@ -110,7 +162,7 @@ void scheduler_tick(server_t *server)
             continue;
         if (client->busy) {
             if (is_ready(client->ready_at))
-                finish_command(client);
+                finish_command(server, client);
         } else {
             start_next_command(server, client);
         }
