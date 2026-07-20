@@ -43,6 +43,8 @@ from strategy import (
     should_wait_before_incantation,
 )
 
+PLAYER_LEVEL = 1
+
 
 def read_and_get_arguments(argument_type, default=None):
 
@@ -122,6 +124,16 @@ def choose_exploration_command(tile):
     return choice(SURVIVAL_MOVES)
 
 
+def update_player_level(response):
+
+    global PLAYER_LEVEL
+
+    if not response.startswith("Current level:"):
+        return False
+    PLAYER_LEVEL = int(response.split(":")[1].strip())
+    return True
+
+
 def try_first_incantation(server_connection, inventory, tile):
 
     if inventory.get("linemate", 0) < 1 and "linemate" not in tile:
@@ -134,7 +146,7 @@ def try_first_incantation(server_connection, inventory, tile):
 
     if reponse == "Elevation underway":
         reponse = receive_response_from_server(server_connection)
-        if reponse.startswith("Current level:"):
+        if update_player_level(reponse):
             return True
     return False
 
