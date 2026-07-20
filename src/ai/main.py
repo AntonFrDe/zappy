@@ -249,6 +249,14 @@ def wait_before_incantation(server_connection, inventory, look, tile):
     send_command_to_server(server_connection, "Look")
 
 
+def prepare_incantation_step(server_connection, inventory, look, tile):
+
+    if not should_wait_before_incantation(inventory):
+        return False
+    wait_before_incantation(server_connection, inventory, look, tile)
+    return True
+
+
 def do_default_action(server_connection, tile):
 
     if "food" in tile:
@@ -268,8 +276,7 @@ def run_ai_loop(server_connection):
         tile = get_current_tile(look)
 
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
-        if should_wait_before_incantation(inventory):
-            wait_before_incantation(server_connection, inventory, look, tile)
+        if prepare_incantation_step(server_connection, inventory, look, tile):
             continue
         if len(tile) == 0:
             send_command_to_server(server_connection, "Look")
