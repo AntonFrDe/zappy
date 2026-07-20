@@ -113,10 +113,8 @@ def collect_visible_resource(server_connection, tile):
 def get_resource_priority():
 
     needed_resources = list(INCANTATION_STONES.get(PLAYER_LEVEL, {}).keys())
-    return needed_resources + [
-        resource for resource in RESOURCE_PRIORITY
-        if resource not in needed_resources
-    ]
+
+    return needed_resources + [resource for resource in RESOURCE_PRIORITY if resource not in needed_resources]
 
 
 def choose_exploration_command(tile):
@@ -173,6 +171,7 @@ def try_first_incantation(server_connection, inventory, tile):
 
 
 def try_level_two_incantation(server_connection, inventory, tile):
+
     if not can_try_level_two(inventory, tile):
         return False
     if count_visible_item(tile, "player") > 1:
