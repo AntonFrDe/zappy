@@ -3,8 +3,9 @@
 #include <unistd.h>
     #include "struct.h"
     #include "error.h"
-    #include "client.h"
     #include "map.h"
+    #include "player.h"
+    #include "client.h"
     #include "network.h"
     #include "command.h"
     #include <stdlib.h>

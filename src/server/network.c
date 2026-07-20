@@ -144,6 +144,7 @@ static bool handle_team_name(server_t *server, client_t *client,
     server->slots_remaining[team_i]--;
     client->team_index = team_i;
     client->handshake_done = true;
+    client->player = player_create(server->map);
     snprintf(msg, sizeof(msg), "%u\n", server->slots_remaining[team_i]);
     client_queue_send(client, msg);
     send_map_size(server, client);
