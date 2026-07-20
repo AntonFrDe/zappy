@@ -319,6 +319,23 @@ def collect_visible_stone_step(server_connection, tile):
     return True
 
 
+def handle_early_resource_step(server_connection, inventory, tile):
+
+    if should_take_linemate_first(tile):
+        send_command_to_server(server_connection, "Take linemate")
+        return True
+    if should_seek_linemate_before_other_stones(tile, inventory):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    if should_take_deraumere_first(tile, inventory):
+        send_command_to_server(server_connection, "Take deraumere")
+        return True
+    if should_seek_food_before_rare_stone(tile, inventory):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    return False
+
+
 def run_ai_loop(server_connection):
 
     while True:
@@ -344,17 +361,7 @@ def run_ai_loop(server_connection):
             continue
         if avoid_crowded_tile_step(server_connection, tile):
             continue
-        if should_take_linemate_first(tile):
-            send_command_to_server(server_connection, "Take linemate")
-            continue
-        if should_seek_linemate_before_other_stones(tile, inventory):
-            send_command_to_server(server_connection, "Forward")
-            continue
-        if should_take_deraumere_first(tile, inventory):
-            send_command_to_server(server_connection, "Take deraumere")
-            continue
-        if should_seek_food_before_rare_stone(tile, inventory):
-            send_command_to_server(server_connection, "Forward")
+        if handle_early_resource_step(server_connection, inventory, tile):
             continue
         if take_guarded_resource_step(server_connection, inventory, tile):
             continue
