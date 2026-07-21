@@ -38,6 +38,18 @@ merger" pour les lancer.
 - **Chaque test doit être indépendant** — pas de port fixe partagé, pas
   d'ordre d'exécution requis. Il doit pouvoir tourner seul.
 
+## Ajouter un test
+
+- **C / C++ (Criterion)** : ouvrir le fichier du composant concerné (voir
+  le tableau ci-dessus), copier un `Test(suite, ...)` voisin comme point de
+  départ, adapter le nom et le contenu. Rebuild avec
+  `make fclean && make tests_run`.
+- **Python (unittest)** : ajouter la méthode dans la classe `TestXxx`
+  correspondant à la fonction testée (une classe par fonction dans
+  `test_main.py`). Fonction pure → appel direct + `assertTrue`/`assertEqual`.
+  Fonction qui parle au serveur → `patch.object(ai, "send_command_to_server", ...)`
+  pour simuler la réponse.
+
 ## Avant de merger
 
 Ces deux commandes doivent passer sans erreur :
