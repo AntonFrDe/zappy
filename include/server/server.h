@@ -8,6 +8,7 @@
     #include "client.h"
     #include "network.h"
     #include "command.h"
+    #include "commands.h"
     #include <stdlib.h>
     #include <stdio.h>
 
