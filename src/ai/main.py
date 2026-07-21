@@ -18,6 +18,7 @@ from strategy import (
     count_visible_item,
     get_current_tile,
     get_guarded_resource_to_take,
+    has_required_stones_for_level,
     parse_inventory_response,
     should_avoid_busy_resource_tile,
     should_check_inventory,
@@ -45,6 +46,7 @@ from strategy import (
 )
 
 PLAYER_LEVEL = 1
+INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -178,6 +180,24 @@ def try_level_two_incantation(server_connection, inventory, tile):
         send_command_to_server(server_connection, "Right")
         return True
     return try_first_incantation(server_connection, inventory, tile)
+
+
+def try_current_incantation(server_connection, inventory, tile):
+
+    if PLAYER_LEVEL not in INCANTATION_PLAYERS:
+        return False
+    if inventory.get("food", 0) < 2:
+        return False
+    if count_visible_item(tile, "player") < INCANTATION_PLAYERS[PLAYER_LEVEL]:
+        return False
+    if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
+        return False
+    if not place_missing_stones_for_level(server_connection, inventory, tile, PLAYER_LEVEL):
+        return False
+    reponse = send_command_to_server(server_connection, "Incantation")
+    if reponse != "Elevation underway":
+        return False
+    return update_player_level(receive_response_from_server(server_connection))
 
 
 def move_when_food_is_low(server_connection, inventory, tile):
@@ -381,7 +401,7 @@ def run_ai_loop(server_connection):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
             continue
-        if PLAYER_LEVEL == 1 and try_level_two_incantation(server_connection, inventory, tile):
+        if try_current_incantation(server_connection, inventory, tile):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
