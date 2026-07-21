@@ -7,11 +7,21 @@ qui vérifie son comportement.
 
 ## Qui teste quoi
 
-- `tests/server` (C, Criterion) : parser CLI, buffers client, gestion
-  d'erreurs, protocole réseau.
-- `tests/gui` (C++, Criterion) : parseur des commandes envoyées par le
-  serveur.
-- `tests/ai` (Python, unittest) : logique de décision du bot.
+| Fichier | Tests | Couvre |
+|---|---|---|
+| `server/test_parser.c` | 35 | parser CLI (`-p -x -y -n -c -f`, limites, erreurs) |
+| `server/test_client.c` | 9 | buffers de réception/envoi, file de commandes |
+| `server/test_error.c` | 9 | construction/libération des erreurs (`fail`, `free_error`) |
+| `server/test_handshake.c` | 5 | poignée de main réseau de bout en bout (vrai socket) |
+| `server/test_map.c` | 15 | grille torique (wrapping), déplacements, spawn des ressources |
+| `server/test_command.c` | 3 | coût des commandes (`command_cost`) |
+| `server/test_scheduler.c` | 3 | ordonnancement des commandes (délai, réponse) |
+| `gui/test_command_parser.cpp` | 25 | parseur des commandes serveur → GUI (`msz`, `bct`, `pnw`...) |
+| `ai/test_main.py` | 125 | logique de décision du bot (priorités, incantation, survie) |
+
+`tests/server` (C, Criterion), `tests/gui` (C++, Criterion) et `tests/ai`
+(Python, unittest) restent trois suites indépendantes — voir "Avant de
+merger" pour les lancer.
 
 ## Règles
 
