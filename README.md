@@ -41,6 +41,16 @@ make clean fclean re
 | `-f freq` | Fréquence (inverse de l'unité de temps), défaut `100` |
 | `-h machine` | Adresse du serveur, défaut `localhost` |
 
+## Tests
+
+Chaque composant a sa propre suite de tests : le détail (frameworks, règles,
+ce qui est/n'est pas couvert) est dans [`tests/README.md`](tests/README.md).
+
+```bash
+make fclean && make tests_run          # server + gui (Criterion)
+python3 -m unittest tests.ai.test_main -v   # ia (unittest)
+```
+
 ## Équipe
 
 | Membre | Rôle |
