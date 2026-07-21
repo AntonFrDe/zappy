@@ -41,6 +41,16 @@ make clean fclean re
 | `-f freq` | Fréquence (inverse de l'unité de temps), défaut `100` |
 | `-h machine` | Adresse du serveur, défaut `localhost` |
 
+## Tests
+
+Chaque composant a sa propre suite de tests : le détail (frameworks, règles,
+ce qui est/n'est pas couvert) est dans [`tests/README.md`](tests/README.md).
+
+```bash
+make fclean && make tests_run          # server + gui (Criterion)
+python3 -m unittest tests.ai.test_main -v   # ia (unittest)
+```
+
 ## Équipe
 
 | Membre | Rôle |
@@ -56,5 +66,7 @@ L'avancement des tâches est suivi sur le [GitHub Project (Kanban)](https://gith
 
 ## Documentation
 
+- [`docs/architecture.md`](docs/architecture.md) — comment le serveur, la GUI et l'IA s'articulent
+- [`docs/server.md`](docs/server.md), [`docs/gui.md`](docs/gui.md), [`docs/ai.md`](docs/ai.md) — un aperçu par composant
 - Sujet complet du projet et protocole GUI : voir les documents fournis par Epitech.
 - Le protocole réseau client IA ↔ serveur ainsi que le protocole GUI ↔ serveur sont détaillés dans le sujet.
