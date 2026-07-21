@@ -66,5 +66,7 @@ L'avancement des tâches est suivi sur le [GitHub Project (Kanban)](https://gith
 
 ## Documentation
 
+- [`docs/architecture.md`](docs/architecture.md) — comment le serveur, la GUI et l'IA s'articulent
+- [`docs/server.md`](docs/server.md), [`docs/gui.md`](docs/gui.md), [`docs/ai.md`](docs/ai.md) — un aperçu par composant
 - Sujet complet du projet et protocole GUI : voir les documents fournis par Epitech.
 - Le protocole réseau client IA ↔ serveur ainsi que le protocole GUI ↔ serveur sont détaillés dans le sujet.

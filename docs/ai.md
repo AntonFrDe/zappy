@@ -2,7 +2,14 @@
 
 _Un joueur autonome qui négocie ses priorités à chaque tour, sans jamais rien demander._
 
-Le client IA pilote un seul joueur : il envoie des commandes texte au serveur, lit les réponses, et décide de la prochaine action à chaque itération. Toute la logique tient dans un seul fichier, `main.py`.
+Le client IA pilote un seul joueur : il envoie des commandes texte au serveur, lit les réponses, et décide de la prochaine action à chaque itération.
+
+## Fichiers clés
+
+| Fichier | Rôle |
+|---|---|
+| `main.py` | Connexion réseau, boucle principale (`run_ai_loop`), point d'entrée |
+| `strategy.py` | Fonctions de décision pures (priorités, incantation, ramassage) |
 
 ## Démarrage
 
