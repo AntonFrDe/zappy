@@ -164,6 +164,18 @@ bool NetworkClient::performHandshake(std::string &errorMsg)
 bool NetworkClient::receiveLines(std::vector<std::string> &lines, std::string &errorMsg)
 {
     lines.clear();
-    errorMsg = "receiveLines: pas encore implementé";
-    return false;
+    if (!readAvailable(16, errorMsg))
+        return false;
+    std::size_t start = 0;
+    std::size_t pos;
+    while ((pos = _readBuffer.find('\n', start)) != std::string::npos)
+    {
+        std::string line = _readBuffer.substr(start, pos - start);
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        lines.push_back(std::move(line));
+        start = pos + 1;
+    }
+    _readBuffer.erase(0, start);
+    return true;
 }
