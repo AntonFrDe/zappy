@@ -87,9 +87,12 @@ def remember_incantation_call(message):
     global LAST_INCANTATION_CALL
 
     parts = message.replace(",", "").split()
-    if len(parts) != 4 or parts[2] != "incantation" or not parts[3].isdigit():
+    if len(parts) != 4 or parts[2] != "incantation" or not parts[1].isdigit() or not parts[3].isdigit():
         return
-    LAST_INCANTATION_CALL = (int(parts[1]), int(parts[3]))
+    direction, level = int(parts[1]), int(parts[3])
+    if level != PLAYER_LEVEL:
+        return
+    LAST_INCANTATION_CALL = (direction, level)
 
 
 def send_command_to_server(server_connection, command):
@@ -229,6 +232,30 @@ def request_incantation_help(server_connection, inventory, tile):
     if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
         return False
     send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
+    return True
+
+
+def follow_incantation_call(server_connection):
+
+    global LAST_INCANTATION_CALL
+
+    call = LAST_INCANTATION_CALL
+    LAST_INCANTATION_CALL = None
+
+    if call is None:
+        return False
+    direction, level = call
+
+    if level != PLAYER_LEVEL or direction == 0:
+        return False
+    if direction in (1, 2, 8):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    if direction in (3, 4, 5):
+        send_command_to_server(server_connection, "Left")
+        return True
+
+    send_command_to_server(server_connection, "Right")
     return True
 
 
@@ -436,6 +463,8 @@ def run_ai_loop(server_connection):
         if try_current_incantation(server_connection, inventory, tile):
             continue
         if request_incantation_help(server_connection, inventory, tile):
+            continue
+        if follow_incantation_call(server_connection):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
