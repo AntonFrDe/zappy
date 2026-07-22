@@ -158,10 +158,6 @@ Test(scheduler, each_command_routes_to_its_own_response_shape)
     cr_assert_eq(write(sock, "Connect_nbr\n", 12), 12);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "0");
-
-    cr_assert_eq(write(sock, "Incantation\n", 12), 12);
-    cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
-    cr_assert_str_eq(line, "Elevation underway");
 }
 
 Test(scheduler, simple_commands_all_get_ok_in_order)

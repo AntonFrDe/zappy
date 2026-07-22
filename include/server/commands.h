@@ -16,4 +16,9 @@
     void command_set(server_t *server, client_t *client, const char *arg);
     void command_incantation(server_t *server, client_t *client, const char *arg);
 
+// verifie joueurs (meme niveau) + pierres sur la case du client
+    bool incantation_check(server_t *server, client_t *client);
+// gele (meme ready_at) les mob trouves sur la case
+    void incantation_freeze_others(server_t *server, client_t *client);
+
 #endif /* !COMMANDS_H_ */
