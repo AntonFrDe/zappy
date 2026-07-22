@@ -64,7 +64,7 @@ int command_cost(const char *cmd)
     return entry != NULL ? entry->cost : -1;
 }
 
-static struct timespec compute_ready_at(int cost, uint16_t freq)
+struct timespec compute_ready_at(int cost, uint16_t freq)
 {
     struct timespec now;
     double seconds = (double)cost / (double)freq;
@@ -130,6 +130,25 @@ static void finish_command(server_t *server, client_t *client)
     client->busy = false;
 }
 
+// true si client meurt de faim (deconnecte, tableau decale)
+static bool check_food(server_t *server, int idx)
+{
+    client_t *client = server->clients[idx];
+    player_t *player = client->player;
+
+    if (!is_ready(player->next_food_tick))
+        return false;
+    if (player->inventory[RESOURCE_FOOD] == 0) {
+        client_queue_send(client, "dead\n");
+        client_flush_send(client);
+        disconnect_client(server, idx);
+        return true;
+    }
+    player->inventory[RESOURCE_FOOD]--;
+    player->next_food_tick = compute_ready_at(126, server->cfg->freq);
+    return false;
+}
+
 void scheduler_tick(server_t *server)
 {
     client_t *client;
@@ -138,6 +157,10 @@ void scheduler_tick(server_t *server)
         client = server->clients[i];
         if (!client->handshake_done || client->is_graphic)
             continue;
+        if (check_food(server, i)) {
+            i--;
+            continue;
+        }
         if (client->busy) {
             if (is_ready(client->ready_at))
                 finish_command(server, client);
