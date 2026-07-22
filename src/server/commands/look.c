@@ -1,9 +1,5 @@
 #include "../../../include/server/commands.h"
 
-static const char *RESOURCE_NAMES[RESOURCE_COUNT] = {
-    "food", "linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"
-};
-
 static int64_t wrap_coord(int64_t v, int64_t max)
 {
     return ((v % max) + max) % max;
@@ -75,7 +71,7 @@ static void send_tile_content(server_t *server, client_t *self,
             if (!first)
                 client_queue_send(self, " ");
 
-            client_queue_send(self, RESOURCE_NAMES[r]);
+            client_queue_send(self, resource_name(r));
             first = false;
         }
 }

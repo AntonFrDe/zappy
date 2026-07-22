@@ -93,3 +93,12 @@ void map_spawn_resources(map_t *map)
         }
     }
 }
+
+static const char *RESOURCE_NAMES[RESOURCE_COUNT] = {
+    "food", "linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"
+};
+
+const char *resource_name(resource_t r)
+{
+    return RESOURCE_NAMES[r];
+}
