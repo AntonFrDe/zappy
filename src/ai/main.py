@@ -200,6 +200,21 @@ def try_current_incantation(server_connection, inventory, tile):
     return update_player_level(receive_response_from_server(server_connection))
 
 
+def request_incantation_help(server_connection, inventory, tile):
+
+    required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
+    if required_players is None or required_players <= 1:
+        return False
+    if inventory.get("food", 0) < 4:
+        return False
+    if count_visible_item(tile, "player") >= required_players:
+        return False
+    if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
+        return False
+    send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
+    return True
+
+
 def move_when_food_is_low(server_connection, inventory, tile):
 
     if inventory.get("food", 0) >= 3:
@@ -402,6 +417,8 @@ def run_ai_loop(server_connection):
         if move_when_food_is_low(server_connection, inventory, tile):
             continue
         if try_current_incantation(server_connection, inventory, tile):
+            continue
+        if request_incantation_help(server_connection, inventory, tile):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
