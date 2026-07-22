@@ -40,6 +40,13 @@
     void map_move(map_t *map, int64_t *x, int64_t *y, direction_t dir);
     // place les ressources initiales (densite * width * height, min 1 de chaque)
     void map_spawn_resources(map_t *map);
+    const char *resource_name(resource_t r);
+    // -1 si nom inconnu
+    int resource_from_name(const char *name);
+    // direction (0-8) de to_x/to_y vue depuis from_x/from_y + son orientation
+    // 0 = meme case, 1 = devant, sens horaire, chemin le plus court (torique)
+    int map_direction(map_t *map, int64_t from_x, int64_t from_y,
+        direction_t from_orientation, int64_t to_x, int64_t to_y);
 
 // TODO: respawn periodique toutes les 20 unites de temps
 // -> a faire avec le scheduler (pas encore code)

@@ -1,5 +1,7 @@
 #include "../../include/server/map.h"
 #include <stdlib.h>
+#include <string.h>
+#include <math.h>
 
 // densite par ressource, cf sujet (ex: 10x10 -> 50 food, 5 thystame)
 static const double RESOURCE_DENSITY[RESOURCE_COUNT] = {
@@ -92,4 +94,70 @@ void map_spawn_resources(map_t *map)
             map->tiles[idx].quantities[r]++;
         }
     }
+}
+
+static const char *RESOURCE_NAMES[RESOURCE_COUNT] = {
+    "food", "linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"
+};
+
+const char *resource_name(resource_t r)
+{
+    return RESOURCE_NAMES[r];
+}
+
+int resource_from_name(const char *name)
+{
+    for (int r = 0; r < RESOURCE_COUNT; r++)
+        if (strcmp(RESOURCE_NAMES[r], name) == 0)
+            return r;
+    return -1;
+}
+
+static int64_t shortest_delta(int64_t raw, int64_t size)
+{
+    int64_t d = ((raw % size) + size) % size;
+
+    if (d > size / 2)
+        d -= size;
+    return d;
+}
+
+static void rotate_to_frame(direction_t orientation, int64_t dx, int64_t dy,
+    int64_t *rx, int64_t *ry)
+{
+    switch (orientation) {
+    case DIR_NORTH:
+        *rx = dx;
+        *ry = dy;
+        break;
+    case DIR_EAST:
+        *rx = dy;
+        *ry = -dx;
+        break;
+    case DIR_SOUTH:
+        *rx = -dx;
+        *ry = -dy;
+        break;
+    case DIR_WEST:
+        *rx = -dy;
+        *ry = dx;
+        break;
+    }
+}
+
+int map_direction(map_t *map, int64_t from_x, int64_t from_y,
+    direction_t from_orientation, int64_t to_x, int64_t to_y)
+{
+    int64_t dx = shortest_delta(to_x - from_x, (int64_t)map->width);
+    int64_t dy = shortest_delta(to_y - from_y, (int64_t)map->height);
+    int64_t rx, ry;
+    double angle;
+
+    if (dx == 0 && dy == 0)
+        return 0;
+    rotate_to_frame(from_orientation, dx, dy, &rx, &ry);
+    angle = atan2((double)rx, (double)-ry) * (180.0 / M_PI);
+    if (angle < 0)
+        angle += 360.0;
+    return (int)((angle + 22.5) / 45.0) % 8 + 1;
 }

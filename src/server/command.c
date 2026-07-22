@@ -90,25 +90,39 @@ static bool is_ready(struct timespec ready_at)
 static void start_next_command(server_t *server, client_t *client)
 {
     char *cmd = client_pop_cmd(client);
-    int cost;
+    const command_entry_t *entry;
 
     if (cmd == NULL)
         return;
-    cost = command_cost(cmd);
-    if (cost < 0) {
+    entry = find_command(cmd);
+    if (entry == NULL) {
+        client_queue_send(client, "ko\n");
+        free(cmd);
+        return;
+    }
+    if (entry->handler == command_incantation && !incantation_check(server, client)) {
         client_queue_send(client, "ko\n");
         free(cmd);
         return;
     }
     client->executing_cmd = cmd;
-    client->ready_at = compute_ready_at(cost, server->cfg->freq);
+    client->ready_at = compute_ready_at(entry->cost, server->cfg->freq);
     client->busy = true;
+    if (entry->handler == command_incantation) {
+        client_queue_send(client, "Elevation underway\n");
+        incantation_freeze_others(server, client);
+    }
 }
 
 static void finish_command(server_t *server, client_t *client)
 {
-    const command_entry_t *entry = find_command(client->executing_cmd);
+    const command_entry_t *entry;
 
+    if (client->executing_cmd == NULL) {
+        client->busy = false;
+        return;
+    }
+    entry = find_command(client->executing_cmd);
     if (entry != NULL)
         entry->handler(server, client, extract_arg(client->executing_cmd));
     free(client->executing_cmd);

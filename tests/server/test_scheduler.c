@@ -105,7 +105,7 @@ Test(scheduler, valid_command_eventually_gets_ok)
     sock = connect_to_server(cfg->port);
     do_handshake(sock, line, sizeof(line));
 
-    cr_assert_eq(write(sock, "Inventory\n", 10), 10);
+    cr_assert_eq(write(sock, "Forward\n", 8), 8);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
 }
@@ -128,7 +128,7 @@ Test(scheduler, unknown_command_gets_ko)
 
 Test(scheduler, response_respects_delay_not_instant)
 {
-    flags_t *cfg = alloc_single_team_cfg(4703, 10, 10, 1, 2);
+    flags_t *cfg = alloc_single_team_cfg(4703, 10, 10, 1, 14);
     pthread_t thread;
     int sock;
     char line[256];
@@ -137,9 +137,48 @@ Test(scheduler, response_respects_delay_not_instant)
     sock = connect_to_server(cfg->port);
     do_handshake(sock, line, sizeof(line));
 
-    cr_assert_eq(write(sock, "Inventory\n", 10), 10);
+    cr_assert_eq(write(sock, "Forward\n", 8), 8);
     cr_assert_eq(data_available_within(sock, 100), false);
     cr_assert_eq(data_available_within(sock, 2000), true);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
+}
+
+Test(scheduler, each_command_routes_to_its_own_response_shape)
+{
+    flags_t *cfg = alloc_single_team_cfg(4704, 10, 10, 1, 1000);
+    pthread_t thread;
+    int sock;
+    char line[256];
+
+    start_test_server(cfg, &thread);
+    sock = connect_to_server(cfg->port);
+    do_handshake(sock, line, sizeof(line));
+
+    cr_assert_eq(write(sock, "Connect_nbr\n", 12), 12);
+    cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
+    cr_assert_str_eq(line, "0");
+}
+
+Test(scheduler, simple_commands_all_get_ok_in_order)
+{
+    flags_t *cfg = alloc_single_team_cfg(4705, 10, 10, 1, 1000);
+    pthread_t thread;
+    int sock;
+    char line[256];
+    const char *cmds[] = {
+        "Right\n", "Left\n", "Fork\n"
+    };
+
+    start_test_server(cfg, &thread);
+    sock = connect_to_server(cfg->port);
+    do_handshake(sock, line, sizeof(line));
+
+    for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++)
+        cr_assert_eq(write(sock, cmds[i], strlen(cmds[i])),
+            (ssize_t)strlen(cmds[i]));
+    for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
+        cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
+        cr_assert_str_eq(line, "ok");
+    }
 }
