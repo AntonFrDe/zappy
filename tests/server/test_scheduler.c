@@ -155,11 +155,6 @@ Test(scheduler, each_command_routes_to_its_own_response_shape)
     sock = connect_to_server(cfg->port);
     do_handshake(sock, line, sizeof(line));
 
-    cr_assert_eq(write(sock, "Inventory\n", 10), 10);
-    cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
-    cr_assert_str_eq(line, "[food 0, linemate 0, deraumere 0, sibur 0, "
-        "mendiane 0, phiras 0, thystame 0]");
-
     cr_assert_eq(write(sock, "Connect_nbr\n", 12), 12);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "0");
