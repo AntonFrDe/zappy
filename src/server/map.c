@@ -1,5 +1,6 @@
 #include "../../include/server/map.h"
 #include <stdlib.h>
+#include <string.h>
 
 // densite par ressource, cf sujet (ex: 10x10 -> 50 food, 5 thystame)
 static const double RESOURCE_DENSITY[RESOURCE_COUNT] = {
@@ -101,4 +102,12 @@ static const char *RESOURCE_NAMES[RESOURCE_COUNT] = {
 const char *resource_name(resource_t r)
 {
     return RESOURCE_NAMES[r];
+}
+
+int resource_from_name(const char *name)
+{
+    for (int r = 0; r < RESOURCE_COUNT; r++)
+        if (strcmp(RESOURCE_NAMES[r], name) == 0)
+            return r;
+    return -1;
 }
