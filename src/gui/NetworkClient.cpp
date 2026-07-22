@@ -1,8 +1,7 @@
 #include "NetworkClient.hpp"
 
-#include <cerrno>
-#include <cstring>
 #include <netdb.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -57,7 +56,7 @@ bool NetworkClient::connectToServer(const std::string &host, unsigned short port
     freeaddrinfo(resolved);
     if (fd < 0)
     {
-        errorMsg = "Connexion impossible a " + host + ":" + portStr + ": " + std::strerror(errno);
+        errorMsg = "Connexion impossible a " + host + ":" + portStr;
         return false;
     }
     _socketFd = fd;
@@ -66,10 +65,100 @@ bool NetworkClient::connectToServer(const std::string &host, unsigned short port
     return true;
 }
 
+bool NetworkClient::readAvailable(int waitMs, std::string &errorMsg)
+{
+    if (!_connected)
+    {
+        errorMsg = "Socket non connecte";
+        return false;
+    }
+
+    struct pollfd pfd{};
+    pfd.fd = _socketFd;
+    pfd.events = POLLIN;
+
+    int pollResult = poll(&pfd, 1, waitMs);
+    if (pollResult < 0)
+    {
+        errorMsg = "poll() a echoue";
+        disconnect();
+        return false;
+    }
+    if (pollResult == 0)
+        return true;
+
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
+    {
+        errorMsg = "Connexion perdue avec le serveur";
+        disconnect();
+        return false;
+    }
+
+    char buffer[4096];
+    ssize_t received = recv(_socketFd, buffer, sizeof(buffer), 0);
+    if (received < 0)
+    {
+        errorMsg = "recv() a echoue";
+        disconnect();
+        return false;
+    }
+    if (received == 0)
+    {
+        errorMsg = "Le serveur a ferme la connexion";
+        disconnect();
+        return false;
+    }
+
+    _readBuffer.append(buffer, static_cast<std::size_t>(received));
+    return true;
+}
+
+bool NetworkClient::readLineBlocking(std::string &line, std::string &errorMsg)
+{
+    while (true)
+    {
+        std::size_t pos = _readBuffer.find('\n');
+        if (pos != std::string::npos)
+        {
+            line = _readBuffer.substr(0, pos);
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+            _readBuffer.erase(0, pos + 1);
+            return true;
+        }
+
+        if (!readAvailable(5000, errorMsg))
+            return false;
+    }
+}
+
 bool NetworkClient::performHandshake(std::string &errorMsg)
 {
-    errorMsg = "performHandshake: pas encore implementé";
-    return false;
+    if (!_connected)
+    {
+        errorMsg = "Impossible de faire le handshake: pas connecte";
+        return false;
+    }
+
+    std::string welcomeLine;
+    if (!readLineBlocking(welcomeLine, errorMsg))
+        return false;
+    if (welcomeLine != "WELCOME")
+    {
+        errorMsg = "Handshake invalide, attendu \"WELCOME\", recu \"" + welcomeLine + "\"";
+        disconnect();
+        return false;
+    }
+    static const std::string kGraphicMessage = "GRAPHIC\n";
+    ssize_t sent = send(_socketFd, kGraphicMessage.c_str(), kGraphicMessage.size(), 0);
+    if (sent < 0 || static_cast<std::size_t>(sent) != kGraphicMessage.size())
+    {
+        errorMsg = "Envoi de GRAPHIC echoue";
+        disconnect();
+        return false;
+    }
+
+    return true;
 }
 
 bool NetworkClient::receiveLines(std::vector<std::string> &lines, std::string &errorMsg)

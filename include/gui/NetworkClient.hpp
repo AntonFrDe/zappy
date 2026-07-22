@@ -9,6 +9,8 @@ class NetworkClient
         int _socketFd;
         bool _connected;
         std::string _readBuffer;
+        bool readAvailable(int waitMs, std::string &errorMsg);
+        bool readLineBlocking(std::string &line, std::string &errorMsg);
     public:
         NetworkClient();
         ~NetworkClient();
