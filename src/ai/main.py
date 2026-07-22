@@ -59,20 +59,23 @@ def read_and_get_arguments(argument_type, default=None):
 
 def receive_response_from_server(server_connection):
 
-    data = b""
+    while True:
+        data = b""
 
-    while not data.endswith(b"\n"):
-        part_of_response = server_connection.recv(1)
-        if not part_of_response:
-            sys.exit(84)
-        data += part_of_response
+        while not data.endswith(b"\n"):
+            part_of_response = server_connection.recv(1)
+            if not part_of_response:
+                sys.exit(84)
+            data += part_of_response
 
-    normal_text = data.decode().strip()
+        normal_text = data.decode().strip()
 
-    if normal_text == "dead":
-        sys.exit(0)
+        if normal_text == "dead":
+            sys.exit(0)
+        if normal_text.startswith("message ") or normal_text.startswith("eject:"):
+            continue
 
-    return normal_text
+        return normal_text
 
 
 def send_command_to_server(server_connection, command):
