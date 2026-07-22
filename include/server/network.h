@@ -21,5 +21,7 @@
     int server_init(server_t *server, flags_t *cfg);
     int server_run(server_t *server);
     void server_destroy(server_t *server);
+// ferme et retire server->clients[client_idx] (tableau decale)
+    void disconnect_client(server_t *server, int client_idx);
 
 #endif /* !NETWORK_H_ */

@@ -92,7 +92,7 @@ static void accept_new_client(server_t *server)
     server->nfds++;
 }
 
-static void disconnect_client(server_t *server, int client_idx)
+void disconnect_client(server_t *server, int client_idx)
 {
     client_destroy(server->clients[client_idx]);
     for (int i = client_idx; i < server->nfds - 1; i++) {
@@ -145,6 +145,7 @@ static bool handle_team_name(server_t *server, client_t *client,
     client->team_index = team_i;
     client->handshake_done = true;
     client->player = player_create(server->map);
+    client->player->next_food_tick = compute_ready_at(126, server->cfg->freq);
     snprintf(msg, sizeof(msg), "%u\n", server->slots_remaining[team_i]);
     client_queue_send(client, msg);
     send_map_size(server, client);
