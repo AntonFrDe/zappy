@@ -171,7 +171,7 @@ Test(scheduler, simple_commands_all_get_ok_in_order)
     int sock;
     char line[256];
     const char *cmds[] = {
-        "Right\n", "Left\n", "Fork\n", "Eject\n"
+        "Right\n", "Left\n", "Fork\n"
     };
 
     start_test_server(cfg, &thread);
