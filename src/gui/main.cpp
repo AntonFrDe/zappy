@@ -1,6 +1,9 @@
 #include <iostream>
 
 #include "gui.hpp"
+#include "GameState.hpp"
+#include "CommandParser.hpp"
+#include "NetworkClient.hpp"
 
 int main(int argc, char **argv)
 {
@@ -20,10 +23,32 @@ int main(int argc, char **argv)
         printUsage(argv[0]);
         return 84;
     }
-
     std::cout << "Connexion a " << args.host << ":" << args.port << "..." << std::endl;
-
-    std::cout << "GUI initialisee en mode minimal."
-        << " L'etape reseau restera a brancher dans un module dedie." << std::endl;
+    NetworkClient network;
+    if (!network.connectToServer(args.host, args.port, errorMsg))
+    {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    if (!network.performHandshake(errorMsg))
+    {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    std::cout << "Connecte au serveur, handshake reussi." << std::endl;
+    GameState state;
+    CommandParser parser(state);
+    std::vector<std::string> lines;
+    while (network.isConnected())
+    {
+        if (!network.receiveLines(lines, errorMsg))
+        {
+            std::cerr << "[network] " << errorMsg << std::endl;
+            break;
+        }
+        for (const std::string &line : lines)
+            parser.dispatch(line);
+    }
+    std::cout << "Deconnexion du serveur." << std::endl;
     return 0;
 }
