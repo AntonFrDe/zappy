@@ -54,7 +54,7 @@ TESTS_PARSER_SRC=	$(filter-out $(SERVER_SRC_DIR)/main.c, $(SERVER_SRC))
 # -I. et -Iinclude : nécessaires tant que src/server mélange
 # #include <server/server.h> et #include <include/server/server.h>
 TESTS_CFLAGS	=	-Wall -Wextra -I. -Iinclude $(CRITERION_CFLAGS)
-TESTS_LDLIBS	=	$(CRITERION_LDLIBS) -lpthread
+TESTS_LDLIBS	=	$(CRITERION_LDLIBS) -lpthread -lm
 
 TESTS_GUI_NAME	=	tests_gui
 
@@ -71,7 +71,7 @@ TESTS_GUI_LDLIBS=	$(CRITERION_LDLIBS) -lpthread
 all:	$(SERVER_NAME) $(GUI_NAME) $(AI_NAME)
 
 $(SERVER_NAME):	$(SERVER_OBJ)
-	$(CC) -o $(SERVER_NAME) $(SERVER_OBJ)
+	$(CC) -o $(SERVER_NAME) $(SERVER_OBJ) -lm
 
 $(GUI_NAME):	$(GUI_OBJ)
 	$(CXX) -o $(GUI_NAME) $(GUI_OBJ) $(GUI_LDLIBS)
