@@ -111,6 +111,7 @@ static void finish_command(server_t *server, client_t *client)
 
     if (entry != NULL)
         entry->handler(server, client, extract_arg(client->executing_cmd));
+        
     free(client->executing_cmd);
     client->executing_cmd = NULL;
     client->busy = false;

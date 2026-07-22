@@ -19,24 +19,28 @@ static void get_forward_lateral(direction_t dir, int64_t *fx, int64_t *fy,
         *lx = 1;
         *ly = 0;
         break;
+
     case DIR_EAST:
         *fx = 1;
         *fy = 0;
         *lx = 0;
         *ly = 1;
         break;
+
     case DIR_SOUTH:
         *fx = 0;
         *fy = 1;
         *lx = -1;
         *ly = 0;
         break;
+
     case DIR_WEST:
         *fx = -1;
         *fy = 0;
         *lx = 0;
         *ly = -1;
         break;
+        
     }
 }
 
@@ -46,8 +50,10 @@ static bool player_is_at(server_t *server, client_t *self, int64_t x, int64_t y)
 
     for (int i = 1; i < server->nfds; i++) {
         other = server->clients[i];
+
         if (other == self || other->player == NULL)
             continue;
+
         if (other->player->x == x && other->player->y == y)
             return true;
     }
@@ -64,14 +70,14 @@ static void send_tile_content(server_t *server, client_t *self,
         client_queue_send(self, "player");
         first = false;
     }
-    for (int r = 0; r < RESOURCE_COUNT; r++) {
+    for (int r = 0; r < RESOURCE_COUNT; r++)
         for (int n = 0; n < tile->quantities[r]; n++) {
             if (!first)
                 client_queue_send(self, " ");
+
             client_queue_send(self, RESOURCE_NAMES[r]);
             first = false;
         }
-    }
 }
 
 void command_look(server_t *server, client_t *client, const char *arg)
@@ -83,15 +89,18 @@ void command_look(server_t *server, client_t *client, const char *arg)
     (void)arg;
     get_forward_lateral(client->player->orientation, &fx, &fy, &lx, &ly);
     client_queue_send(client, "[");
+
     for (int row = 0; row <= client->player->level; row++) {
         for (int lat = -row; lat <= row; lat++) {
-            x = wrap_coord(client->player->x + row * fx + lat * lx,
-                (int64_t)server->map->width);
-            y = wrap_coord(client->player->y + row * fy + lat * ly,
-                (int64_t)server->map->height);
+
+            // Recup les coor de case dans les ligne de regard
+            x = wrap_coord(client->player->x + row * fx + lat * lx, (int64_t)server->map->width);
+            y = wrap_coord(client->player->y + row * fy + lat * ly, (int64_t)server->map->height);
+            
             if (!first_tile)
                 client_queue_send(client, ",");
             first_tile = false;
+
             send_tile_content(server, client, x, y);
         }
     }
