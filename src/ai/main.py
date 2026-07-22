@@ -87,9 +87,12 @@ def remember_incantation_call(message):
     global LAST_INCANTATION_CALL
 
     parts = message.replace(",", "").split()
-    if len(parts) != 4 or parts[2] != "incantation" or not parts[3].isdigit():
+    if len(parts) != 4 or parts[2] != "incantation" or not parts[1].isdigit() or not parts[3].isdigit():
         return
-    LAST_INCANTATION_CALL = (int(parts[1]), int(parts[3]))
+    direction, level = int(parts[1]), int(parts[3])
+    if level != PLAYER_LEVEL:
+        return
+    LAST_INCANTATION_CALL = (direction, level)
 
 
 def send_command_to_server(server_connection, command):
