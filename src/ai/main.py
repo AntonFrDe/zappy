@@ -47,6 +47,7 @@ from strategy import (
 
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
+LAST_INCANTATION_CALL = None
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -72,10 +73,23 @@ def receive_response_from_server(server_connection):
 
         if normal_text == "dead":
             sys.exit(0)
-        if normal_text.startswith("message ") or normal_text.startswith("eject:"):
+        if normal_text.startswith("message "):
+            remember_incantation_call(normal_text)
+            continue
+        if normal_text.startswith("eject:"):
             continue
 
         return normal_text
+
+
+def remember_incantation_call(message):
+
+    global LAST_INCANTATION_CALL
+
+    parts = message.replace(",", "").split()
+    if len(parts) != 4 or parts[2] != "incantation" or not parts[3].isdigit():
+        return
+    LAST_INCANTATION_CALL = (int(parts[1]), int(parts[3]))
 
 
 def send_command_to_server(server_connection, command):
