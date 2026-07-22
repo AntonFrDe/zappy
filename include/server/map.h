@@ -41,6 +41,8 @@
     // place les ressources initiales (densite * width * height, min 1 de chaque)
     void map_spawn_resources(map_t *map);
     const char *resource_name(resource_t r);
+    // -1 si nom inconnu
+    int resource_from_name(const char *name);
 
 // TODO: respawn periodique toutes les 20 unites de temps
 // -> a faire avec le scheduler (pas encore code)
