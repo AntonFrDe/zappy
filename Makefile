@@ -12,7 +12,7 @@ AI_NAME		=	zappy_ai
 SERVER_SRC_DIR	=	src/server
 SERVER_INC_DIR	=	include/server
 
-SERVER_SRC	=	$(wildcard $(SERVER_SRC_DIR)/*.c)
+SERVER_SRC	=	$(wildcard $(SERVER_SRC_DIR)/*.c) $(wildcard $(SERVER_SRC_DIR)/commands/*.c)
 SERVER_OBJ	=	$(SERVER_SRC:.c=.o)
 
 CC		=	gcc
