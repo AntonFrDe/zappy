@@ -18,5 +18,6 @@ void command_take(server_t *server, client_t *client, const char *arg)
     }
     tile->quantities[r]--;
     client->player->inventory[r]++;
+    gui_notify_resource_take(server, client, r);
     client_queue_send(client, "ok\n");
 }

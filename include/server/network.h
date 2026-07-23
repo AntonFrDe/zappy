@@ -18,6 +18,8 @@
         uint16_t *slots_remaining;
         map_t *map;
         egg_list_t eggs;
+        int next_client_id;
+        int next_egg_id;
     } server_t;
 
     int server_init(server_t *server, flags_t *cfg);
