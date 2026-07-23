@@ -1,6 +1,7 @@
 #include "../../include/server/network.h"
 #include "../../include/server/command.h"
 #include "../../include/server/gui_protocol.h"
+#include "../../include/server/gui_requests.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -108,6 +109,14 @@ void disconnect_client(server_t *server, int client_idx)
     server->nfds--;
 }
 
+client_t *find_client_by_id(server_t *server, int id)
+{
+    for (int i = 1; i < server->nfds; i++)
+        if (server->clients[i]->id == id)
+            return server->clients[i];
+    return NULL;
+}
+
 static int find_team_index(server_t *server, const char *name)
 {
     for (int i = 0; i < server->cfg->teams_nb; i++)
@@ -177,6 +186,8 @@ static int process_client_input(server_t *server, int client_idx)
         if (!client->handshake_done) {
             if (handle_team_name(server, client, line, client_idx))
                 return 1;
+        } else if (client->is_graphic) {
+            gui_dispatch_request(server, client, line);
         } else {
             client_push_cmd(client, line);
         }

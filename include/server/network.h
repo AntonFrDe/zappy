@@ -27,5 +27,7 @@
     void server_destroy(server_t *server);
 // ferme et retire server->clients[client_idx] (tableau decale)
     void disconnect_client(server_t *server, int client_idx);
+// NULL si aucun client (joueur ou GUI) ne porte cet id
+    client_t *find_client_by_id(server_t *server, int id);
 
 #endif /* !NETWORK_H_ */
