@@ -238,14 +238,18 @@ def request_incantation_help(server_connection, inventory, tile):
 
     global INCANTATION_HELP_SENT
 
-    if INCANTATION_HELP_SENT:
-        return False
     required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
     if required_players is None or required_players <= 1:
         return False
+    waiting_for_players = count_visible_item(tile, "player") + 1 < required_players
+    if INCANTATION_HELP_SENT:
+        if waiting_for_players and inventory.get("food", 0) >= 4 and has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
+            send_command_to_server(server_connection, "Look")
+            return True
+        return False
     if inventory.get("food", 0) < 4:
         return False
-    if count_visible_item(tile, "player") + 1 >= required_players:
+    if not waiting_for_players:
         return False
     if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
         return False
@@ -267,8 +271,11 @@ def follow_incantation_call(server_connection, inventory):
 
     if inventory.get("food", 0) < 3:
         return False
-    if level != PLAYER_LEVEL or direction == 0:
+    if level != PLAYER_LEVEL:
         return False
+    if direction == 0:
+        send_command_to_server(server_connection, "Look")
+        return True
     if direction in (1, 2, 8):
         send_command_to_server(server_connection, "Forward")
         return True
