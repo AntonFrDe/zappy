@@ -116,7 +116,7 @@ class TestSendCommandToServer(unittest.TestCase):
 
 class TestKeepPlayerAlive(unittest.TestCase):
     def test_returns_false_when_food_above_threshold(self):
-        with patch.object(ai, "send_command_to_server", return_value="[food 6]") as sent:
+        with patch.object(ai, "send_command_to_server", return_value="[food 9]") as sent:
             self.assertFalse(ai.keep_player_alive(MagicMock()))
             sent.assert_called_once_with(unittest.mock.ANY, "Inventory")
 
