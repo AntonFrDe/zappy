@@ -37,6 +37,30 @@ def get_current_tile(look):
     return look.strip("[]").split(",")[0].split()
 
 
+def parse_look_response(look):
+
+    return [tile.split() for tile in look.strip("[]").split(",")]
+
+
+def choose_direction_toward_item(look, item):
+
+    tiles = parse_look_response(look)
+
+    for index, tile in enumerate(tiles):
+        if item not in tile:
+            continue
+        if index == 0:
+            return None
+        row = int(index ** 0.5)
+        lateral = index - row * row - row
+        if lateral < 0:
+            return "Left"
+        if lateral > 0:
+            return "Right"
+        return "Forward"
+    return None
+
+
 def count_visible_item(tile, item):
 
     return tile.count(item)

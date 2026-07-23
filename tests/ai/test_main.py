@@ -58,6 +58,29 @@ class TestParseInventoryResponse(unittest.TestCase):
         self.assertEqual(result, {"food": 5, "linemate": 2})
 
 
+class TestParseLookResponse(unittest.TestCase):
+    def test_parses_tiles_and_items(self):
+        result = ai.parse_look_response("[food linemate,,player,deraumere]")
+        self.assertEqual(result, [["food", "linemate"], [], ["player"], ["deraumere"]])
+
+
+class TestChooseDirectionTowardItem(unittest.TestCase):
+    def test_left_food_returns_left(self):
+        self.assertEqual(ai.choose_direction_toward_item("[,food,,]", "food"), "Left")
+
+    def test_center_food_returns_forward(self):
+        self.assertEqual(ai.choose_direction_toward_item("[,,food,]", "food"), "Forward")
+
+    def test_right_food_returns_right(self):
+        self.assertEqual(ai.choose_direction_toward_item("[,,,food]", "food"), "Right")
+
+    def test_current_tile_item_returns_none(self):
+        self.assertIsNone(ai.choose_direction_toward_item("[food,,,]", "food"))
+
+    def test_missing_item_returns_none(self):
+        self.assertIsNone(ai.choose_direction_toward_item("[linemate,,,]", "food"))
+
+
 class TestReceiveResponseFromServer(unittest.TestCase):
     def _connection_yielding(self, payload):
         connection = MagicMock()
@@ -93,7 +116,7 @@ class TestSendCommandToServer(unittest.TestCase):
 
 class TestKeepPlayerAlive(unittest.TestCase):
     def test_returns_false_when_food_above_threshold(self):
-        with patch.object(ai, "send_command_to_server", return_value="[food 6]") as sent:
+        with patch.object(ai, "send_command_to_server", return_value="[food 9]") as sent:
             self.assertFalse(ai.keep_player_alive(MagicMock()))
             sent.assert_called_once_with(unittest.mock.ANY, "Inventory")
 
