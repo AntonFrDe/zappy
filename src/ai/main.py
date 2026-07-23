@@ -442,7 +442,7 @@ def take_guarded_resource_step(server_connection, inventory, tile):
 
 def handle_visible_food_step(server_connection, inventory, tile):
 
-    if should_skip_food_when_full(tile, inventory):
+    if should_skip_food_when_full(tile, inventory) and not should_collect_stone(tile) and not should_collect_rare_stone(tile):
         send_command_to_server(server_connection, "Forward")
         return True
     if should_take_food(tile, inventory):
