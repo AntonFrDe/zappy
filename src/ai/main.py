@@ -53,6 +53,8 @@ PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
 SURVIVAL_FOOD_LIMIT = 8
+SURVIVAL_SEARCH_MOVES = ["Forward", "Forward", "Left"]
+SURVIVAL_SEARCH_INDEX = 0
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -107,6 +109,15 @@ def send_command_to_server(server_connection, command):
     return receive_response_from_server(server_connection)
 
 
+def choose_survival_search_command():
+
+    global SURVIVAL_SEARCH_INDEX
+
+    command = SURVIVAL_SEARCH_MOVES[SURVIVAL_SEARCH_INDEX]
+    SURVIVAL_SEARCH_INDEX = (SURVIVAL_SEARCH_INDEX + 1) % len(SURVIVAL_SEARCH_MOVES)
+    return command
+
+
 def keep_player_alive(server_connection):
 
     inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
@@ -127,7 +138,7 @@ def keep_player_alive(server_connection):
         send_command_to_server(server_connection, direction)
         return True
 
-    send_command_to_server(server_connection, choice(SURVIVAL_MOVES))
+    send_command_to_server(server_connection, choose_survival_search_command())
 
     return True
 
