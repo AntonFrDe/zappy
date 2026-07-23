@@ -118,11 +118,19 @@ def choose_survival_search_command():
     return command
 
 
+def reset_survival_search():
+
+    global SURVIVAL_SEARCH_INDEX
+
+    SURVIVAL_SEARCH_INDEX = 0
+
+
 def keep_player_alive(server_connection):
 
     inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
 
     if inventory.get("food", 0) > SURVIVAL_FOOD_LIMIT:
+        reset_survival_search()
         return False
 
     look = send_command_to_server(server_connection, "Look")
@@ -132,10 +140,12 @@ def keep_player_alive(server_connection):
         for _ in range(count_visible_item(tile, "food")):
             if send_command_to_server(server_connection, "Take food") != "ok":
                 break
+        reset_survival_search()
         return True
     direction = choose_direction_toward_item(look, "food")
     if direction is not None:
         send_command_to_server(server_connection, direction)
+        reset_survival_search()
         return True
 
     send_command_to_server(server_connection, choose_survival_search_command())
