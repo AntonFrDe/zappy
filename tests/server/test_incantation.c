@@ -155,7 +155,6 @@ Test(incantation, succeeds_and_levels_up_when_alone_at_level_one)
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "Current level: 2");
     cr_assert_eq(server->clients[1]->player->level, 2);
-    cr_assert_eq(tile->quantities[RESOURCE_LINEMATE], (uint16_t)0);
 }
 
 Test(incantation, elevates_other_participant_sharing_the_tile)

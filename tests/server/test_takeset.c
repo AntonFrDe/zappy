@@ -30,7 +30,7 @@ static flags_t *alloc_single_team_cfg(int port, uint64_t width,
     teams[0] = "team1";
     *cfg = (flags_t){
         .port = port, .width = width, .height = height,
-        .teams = teams, .teams_nb = 1, .clients_nb = clients_nb, .freq = 1000
+        .teams = teams, .teams_nb = 1, .clients_nb = clients_nb, .freq = 100
     };
     return cfg;
 }
