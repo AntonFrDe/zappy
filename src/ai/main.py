@@ -118,6 +118,9 @@ def keep_player_alive(server_connection):
     if "food" in tile:
         send_command_to_server(server_connection, "Take food")
         return True
+    if "food" in look:
+        send_command_to_server(server_connection, "Forward")
+        return True
 
     send_command_to_server(server_connection, choice(SURVIVAL_MOVES))
 
