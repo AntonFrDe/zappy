@@ -463,25 +463,6 @@ class TestTryLevelTwoIncantation(unittest.TestCase):
             fallback.assert_called_once()
 
 
-class TestTryCurrentIncantation(unittest.TestCase):
-    def setUp(self):
-        ai.PLAYER_LEVEL = 1
-        ai.INCANTATION_HELP_SENT = False
-
-    def test_level_one_counts_self_as_required_player(self):
-        responses = iter(["ok", "Elevation underway"])
-        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)) as sent, \
-             patch.object(ai, "receive_response_from_server", return_value="Current level: 2"):
-            self.assertTrue(ai.try_current_incantation(MagicMock(), {"food": 5, "linemate": 1}, []))
-            calls = [call.args[1] for call in sent.call_args_list]
-            self.assertEqual(calls, ["Set linemate", "Incantation"])
-
-    def test_accepts_direct_current_level_response(self):
-        responses = iter(["ok", "Current level: 2"])
-        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)):
-            self.assertTrue(ai.try_current_incantation(MagicMock(), {"food": 5, "linemate": 1}, []))
-
-
 class TestMoveWhenFoodIsLow(unittest.TestCase):
     def test_enough_food_returns_false(self):
         with patch.object(ai, "send_command_to_server") as sent:

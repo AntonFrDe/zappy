@@ -480,13 +480,13 @@ def run_ai_loop(server_connection):
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
         if prepare_incantation_step(server_connection, inventory, look, tile):
             continue
+        if try_current_incantation(server_connection, inventory, tile):
+            continue
         if len(tile) == 0:
             send_command_to_server(server_connection, "Look")
         if turn_on_empty_tile(server_connection, tile):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
-            continue
-        if try_current_incantation(server_connection, inventory, tile):
             continue
         if request_incantation_help(server_connection, inventory, tile):
             continue
