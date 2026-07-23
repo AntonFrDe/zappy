@@ -52,7 +52,6 @@ from strategy import (
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
-INCANTATION_HELP_SENT = False
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -165,12 +164,11 @@ def choose_exploration_command(tile):
 
 def update_player_level(response):
 
-    global PLAYER_LEVEL, INCANTATION_HELP_SENT
+    global PLAYER_LEVEL
 
     if not response.startswith("Current level:"):
         return False
     PLAYER_LEVEL = int(response.split(":")[1].strip())
-    INCANTATION_HELP_SENT = False
     return True
 
 
@@ -234,27 +232,28 @@ def try_current_incantation(server_connection, inventory, tile):
     return update_player_level(receive_response_from_server(server_connection))
 
 
-def request_incantation_help(server_connection, inventory, tile):
+def has_incantation_help_requirements(inventory, tile, required_players):
 
-    global INCANTATION_HELP_SENT
+    if inventory.get("food", 0) < 4:
+        return False
+    if count_visible_item(tile, "player") + 1 >= required_players:
+        return False
+    return has_required_stones_for_level(PLAYER_LEVEL, inventory, tile)
+
+
+def broadcast_incantation_help(server_connection):
+
+    send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
+
+
+def request_incantation_help(server_connection, inventory, tile):
 
     required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
     if required_players is None or required_players <= 1:
         return False
-    waiting_for_players = count_visible_item(tile, "player") + 1 < required_players
-    if INCANTATION_HELP_SENT:
-        if waiting_for_players and inventory.get("food", 0) >= 4 and has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
-            send_command_to_server(server_connection, "Look")
-            return True
+    if not has_incantation_help_requirements(inventory, tile, required_players):
         return False
-    if inventory.get("food", 0) < 4:
-        return False
-    if not waiting_for_players:
-        return False
-    if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
-        return False
-    send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
-    INCANTATION_HELP_SENT = True
+    broadcast_incantation_help(server_connection)
     return True
 
 
