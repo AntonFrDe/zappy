@@ -16,10 +16,12 @@ from strategy import (
     INCANTATION_STONES,
     RESOURCE_PRIORITY,
     SURVIVAL_MOVES,
+    can_try_level_two,
     choose_direction_toward_item,
     count_visible_item,
     get_current_tile,
     get_guarded_resource_to_take,
+    has_required_stones_for_level,
     parse_look_response,
     parse_inventory_response,
     should_avoid_busy_resource_tile,
@@ -46,21 +48,13 @@ from strategy import (
     should_turn_on_busy_tile,
     should_wait_before_incantation,
 )
-from incantation import (
-    INCANTATION_PLAYERS,
-    follow_incantation_call as incantation_follow_incantation_call,
-    parse_level_response,
-    place_missing_stones_for_level as incantation_place_missing_stones_for_level,
-    remember_incantation_call as incantation_remember_incantation_call,
-    request_incantation_help as incantation_request_incantation_help,
-    try_current_incantation as incantation_try_current_incantation,
-    try_first_incantation as incantation_try_first_incantation,
-    try_level_two_incantation as incantation_try_level_two_incantation,
-)
-from survival import keep_player_alive as survival_keep_player_alive
 
 PLAYER_LEVEL = 1
+INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
+SURVIVAL_FOOD_LIMIT = 8
+SURVIVAL_SEARCH_MOVES = ["Forward", "Forward", "Left"]
+SURVIVAL_SEARCH_INDEX = 0
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -99,9 +93,13 @@ def remember_incantation_call(message):
 
     global LAST_INCANTATION_CALL
 
-    call = incantation_remember_incantation_call(message, PLAYER_LEVEL)
-    if call is not None:
-        LAST_INCANTATION_CALL = call
+    parts = message.replace(",", "").split()
+    if len(parts) != 4 or parts[2] != "incantation" or not parts[1].isdigit() or not parts[3].isdigit():
+        return
+    direction, level = int(parts[1]), int(parts[3])
+    if level != PLAYER_LEVEL:
+        return
+    LAST_INCANTATION_CALL = (direction, level)
 
 
 def send_command_to_server(server_connection, command):
@@ -111,9 +109,48 @@ def send_command_to_server(server_connection, command):
     return receive_response_from_server(server_connection)
 
 
+def choose_survival_search_command():
+
+    global SURVIVAL_SEARCH_INDEX
+
+    command = SURVIVAL_SEARCH_MOVES[SURVIVAL_SEARCH_INDEX]
+    SURVIVAL_SEARCH_INDEX = (SURVIVAL_SEARCH_INDEX + 1) % len(SURVIVAL_SEARCH_MOVES)
+    return command
+
+
+def reset_survival_search():
+
+    global SURVIVAL_SEARCH_INDEX
+
+    SURVIVAL_SEARCH_INDEX = 0
+
+
 def keep_player_alive(server_connection):
 
-    return survival_keep_player_alive(server_connection, send_command_to_server)
+    inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+
+    if inventory.get("food", 0) > SURVIVAL_FOOD_LIMIT:
+        reset_survival_search()
+        return False
+
+    look = send_command_to_server(server_connection, "Look")
+    tile = get_current_tile(look)
+
+    if "food" in tile:
+        for _ in range(count_visible_item(tile, "food")):
+            if send_command_to_server(server_connection, "Take food") != "ok":
+                break
+        reset_survival_search()
+        return True
+    direction = choose_direction_toward_item(look, "food")
+    if direction is not None:
+        send_command_to_server(server_connection, direction)
+        reset_survival_search()
+        return True
+
+    send_command_to_server(server_connection, choose_survival_search_command())
+
+    return True
 
 
 def collect_visible_resource(server_connection, tile):
@@ -153,40 +190,95 @@ def update_player_level(response):
 
     global PLAYER_LEVEL
 
-    new_level = parse_level_response(response)
-    if new_level is None:
+    if not response.startswith("Current level:"):
         return False
-    PLAYER_LEVEL = new_level
+    PLAYER_LEVEL = int(response.split(":")[1].strip())
     return True
 
 
 def place_missing_stones_for_level(server_connection, inventory, tile, level):
 
-    return incantation_place_missing_stones_for_level(server_connection, inventory, tile, level, send_command_to_server)
+    for resource, count in INCANTATION_STONES.get(level, {}).items():
+        missing = count - count_visible_item(tile, resource)
+        while missing > 0:
+            if inventory.get(resource, 0) <= 0:
+                return False
+            reponse = send_command_to_server(server_connection, "Set " + resource)
+            if reponse != "ok":
+                return False
+            inventory[resource] -= 1
+            missing -= 1
+    return True
 
 
 def try_first_incantation(server_connection, inventory, tile):
 
-    return incantation_try_first_incantation(server_connection, inventory, tile,
-        send_command_to_server, receive_response_from_server, update_player_level)
+    if not place_missing_stones_for_level(server_connection, inventory, tile, 1):
+        return False
+    reponse = send_command_to_server(server_connection, "Incantation")
+
+    if update_player_level(reponse):
+        return True
+    if reponse == "Elevation underway":
+        reponse = receive_response_from_server(server_connection)
+        if update_player_level(reponse):
+            return True
+    return False
 
 
 def try_level_two_incantation(server_connection, inventory, tile):
 
-    return incantation_try_level_two_incantation(server_connection, inventory, tile,
-        send_command_to_server, try_first_incantation)
+    if not can_try_level_two(inventory, tile):
+        return False
+    if count_visible_item(tile, "player") > 1:
+        send_command_to_server(server_connection, "Right")
+        return True
+    return try_first_incantation(server_connection, inventory, tile)
 
 
 def try_current_incantation(server_connection, inventory, tile):
 
-    return incantation_try_current_incantation(server_connection, inventory, tile,
-        PLAYER_LEVEL, send_command_to_server, receive_response_from_server, update_player_level)
+    if PLAYER_LEVEL not in INCANTATION_PLAYERS:
+        return False
+    if inventory.get("food", 0) < 2:
+        return False
+    if count_visible_item(tile, "player") + 1 < INCANTATION_PLAYERS[PLAYER_LEVEL]:
+        return False
+    if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
+        return False
+    if not place_missing_stones_for_level(server_connection, inventory, tile, PLAYER_LEVEL):
+        return False
+    reponse = send_command_to_server(server_connection, "Incantation")
+    if update_player_level(reponse):
+        return True
+    if reponse != "Elevation underway":
+        return False
+    return update_player_level(receive_response_from_server(server_connection))
+
+
+def has_incantation_help_requirements(inventory, tile, required_players):
+
+    if inventory.get("food", 0) < 4:
+        return False
+    if count_visible_item(tile, "player") + 1 >= required_players:
+        return False
+    return has_required_stones_for_level(PLAYER_LEVEL, inventory, tile)
+
+
+def broadcast_incantation_help(server_connection):
+
+    send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
 
 
 def request_incantation_help(server_connection, inventory, tile):
 
-    return incantation_request_incantation_help(server_connection, inventory, tile,
-        PLAYER_LEVEL, send_command_to_server)
+    required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
+    if required_players is None or required_players <= 1:
+        return False
+    if not has_incantation_help_requirements(inventory, tile, required_players):
+        return False
+    broadcast_incantation_help(server_connection)
+    return True
 
 
 def follow_incantation_call(server_connection, inventory):
@@ -196,8 +288,26 @@ def follow_incantation_call(server_connection, inventory):
     call = LAST_INCANTATION_CALL
     LAST_INCANTATION_CALL = None
 
-    return incantation_follow_incantation_call(server_connection, inventory, call,
-        PLAYER_LEVEL, send_command_to_server)
+    if call is None:
+        return False
+    direction, level = call
+
+    if inventory.get("food", 0) < 3:
+        return False
+    if level != PLAYER_LEVEL:
+        return False
+    if direction == 0:
+        send_command_to_server(server_connection, "Look")
+        return True
+    if direction in (1, 2, 8):
+        send_command_to_server(server_connection, "Forward")
+        return True
+    if direction in (3, 4, 5):
+        send_command_to_server(server_connection, "Left")
+        return True
+
+    send_command_to_server(server_connection, "Right")
+    return True
 
 
 def move_when_food_is_low(server_connection, inventory, tile):
