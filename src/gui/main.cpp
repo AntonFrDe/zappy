@@ -36,7 +36,17 @@ int main(int argc, char **argv)
         return 84;
     }
     std::cout << "Connecte au serveur, handshake reussi." << std::endl;
+
     GameState state;
+    int width, height;
+    if (!network.readInitialMapSize(width, height, errorMsg))
+    {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    state.resizeMap(width, height);
+    std::cout << "Taille de la map: " << width << "x" << height << std::endl;
+
     CommandParser parser(state);
     std::vector<std::string> lines;
     while (network.isConnected())

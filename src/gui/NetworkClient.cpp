@@ -2,6 +2,7 @@
 
 #include <netdb.h>
 #include <poll.h>
+#include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -158,6 +159,23 @@ bool NetworkClient::performHandshake(std::string &errorMsg)
         return false;
     }
 
+    return true;
+}
+
+bool NetworkClient::readInitialMapSize(int &width, int &height, std::string &errorMsg)
+{
+    std::string discard;
+    if (!readLineBlocking(discard, errorMsg))
+        return false;
+    std::string sizeLine;
+    if (!readLineBlocking(sizeLine, errorMsg))
+        return false;
+    std::istringstream iss(sizeLine);
+    if (!(iss >> width >> height))
+    {
+        errorMsg = "Taille de map invalide recue du serveur: \"" + sizeLine + "\"";
+        return false;
+    }
     return true;
 }
 
