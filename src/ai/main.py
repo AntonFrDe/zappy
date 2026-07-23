@@ -50,6 +50,7 @@ from strategy import (
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
+INCANTATION_HELP_SENT = False
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -158,11 +159,12 @@ def choose_exploration_command(tile):
 
 def update_player_level(response):
 
-    global PLAYER_LEVEL
+    global PLAYER_LEVEL, INCANTATION_HELP_SENT
 
     if not response.startswith("Current level:"):
         return False
     PLAYER_LEVEL = int(response.split(":")[1].strip())
+    INCANTATION_HELP_SENT = False
     return True
 
 
@@ -224,6 +226,10 @@ def try_current_incantation(server_connection, inventory, tile):
 
 def request_incantation_help(server_connection, inventory, tile):
 
+    global INCANTATION_HELP_SENT
+
+    if INCANTATION_HELP_SENT:
+        return False
     required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
     if required_players is None or required_players <= 1:
         return False
@@ -234,6 +240,7 @@ def request_incantation_help(server_connection, inventory, tile):
     if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
         return False
     send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
+    INCANTATION_HELP_SENT = True
     return True
 
 
