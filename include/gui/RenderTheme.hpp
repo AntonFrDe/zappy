@@ -33,6 +33,11 @@ RgbColor teamColor(const std::string &teamName);
 // en "grosse pastille" (power pellet), les 3 premieres en pastille simple.
 bool isRareResource(int resourceIndex);
 
+// Couleur propre a chaque type de ressource (une teinte distincte par
+// index), pour que les 7 ressources soient identifiables au premier
+// coup d'oeil sur une tuile au lieu de se fondre en 2 couleurs.
+RgbColor resourceColor(int resourceIndex);
+
 // Angle (degres, sens horaire, 0 = fait face a droite) correspondant a une
 // valeur brute d'Orientation (North=0, East=1, South=2, West=3).
 float orientationAngleDeg(int orientation);

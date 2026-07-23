@@ -33,6 +33,29 @@ bool isRareResource(int resourceIndex)
     return resourceIndex >= 3 && resourceIndex <= 6;
 }
 
+namespace {
+
+// food, linemate, deraumere, sibur, mendiane, phiras, thystame : une
+// teinte distincte par ressource (le jaune pur reste reserve au Pac-Man).
+constexpr RgbColor kResourcePalette[7] = {
+    {255, 233, 176}, // food
+    {110, 210, 255}, // linemate
+    {200, 130, 255}, // deraumere
+    {110, 255, 170}, // sibur
+    {255, 110, 150}, // mendiane
+    {255, 150, 60},  // phiras
+    {170, 255, 235}, // thystame
+};
+
+}
+
+RgbColor resourceColor(int resourceIndex)
+{
+    if (resourceIndex < 0 || resourceIndex >= 7)
+        return RgbColor{255, 255, 255};
+    return kResourcePalette[resourceIndex];
+}
+
 float orientationAngleDeg(int orientation)
 {
     switch (orientation) {
