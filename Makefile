@@ -29,8 +29,7 @@ GUI_OBJ		=	$(GUI_SRC:.cpp=.o)
 
 CXX		=	g++
 CXXFLAGS	+=	-Wall -Wextra -I$(GUI_INC_DIR)
-# Décommenter une fois SFML utilisé dans le code :
-# GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
+GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
 
 # ---------------------------------------------------------------------------
 # AI (Python)
@@ -63,7 +62,7 @@ TESTS_GUI_SRC	=	$(wildcard $(TESTS_GUI_SRC_DIR)/*.cpp)
 TESTS_GUI_PARSER_SRC=	$(filter-out $(GUI_SRC_DIR)/main.cpp, $(GUI_SRC))
 
 TESTS_GUI_CXXFLAGS=	-Wall -Wextra -I$(GUI_INC_DIR) $(CRITERION_CFLAGS)
-TESTS_GUI_LDLIBS=	$(CRITERION_LDLIBS) -lpthread
+TESTS_GUI_LDLIBS=	$(CRITERION_LDLIBS) -lpthread $(GUI_LDLIBS)
 
 # ---------------------------------------------------------------------------
 # Rules

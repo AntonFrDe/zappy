@@ -514,48 +514,27 @@ class TestIfLowFoodSeekFood(unittest.TestCase):
 
 
 class TestTryCreateTeamSlot(unittest.TestCase):
-    def test_ready_for_level_two_returns_false(self):
-        with patch.object(ai, "send_command_to_server") as sent:
-            inventory = {"food": 10, "linemate": 1}
-            self.assertFalse(ai.try_create_team_slot(MagicMock(), inventory, ["linemate"]))
-            sent.assert_not_called()
-
     def test_not_enough_food_returns_false(self):
         with patch.object(ai, "send_command_to_server") as sent:
             self.assertFalse(ai.try_create_team_slot(MagicMock(), {"food": 1}, []))
             sent.assert_not_called()
 
-    def test_not_enough_linemate_returns_false(self):
-        with patch.object(ai, "send_command_to_server") as sent:
-            self.assertFalse(ai.try_create_team_slot(MagicMock(), {"food": 8, "linemate": 0}, []))
-            sent.assert_not_called()
-
-    # NOTE: with real inputs, try_create_team_slot can never reach the
-    # Connect_nbr/Fork branch below: it requires inventory["linemate"] >= 1,
-    # but can_try_level_two() (checked first) already returns True as soon
-    # as food >= 2 and linemate > 0 -- so the function always exits early
-    # via "return False" on the can_try_level_two check whenever the
-    # linemate requirement is met. can_try_level_two is mocked here to
-    # exercise the branch in isolation; this is a logic bug to report.
     def test_non_digit_connect_nbr_returns_false(self):
-        with patch.object(ai, "can_try_level_two", return_value=False), \
-             patch.object(ai, "send_command_to_server", return_value="ko") as sent:
-            inventory = {"food": 8, "linemate": 1}
+        with patch.object(ai, "send_command_to_server", return_value="ko") as sent:
+            inventory = {"food": 8}
             self.assertFalse(ai.try_create_team_slot(MagicMock(), inventory, []))
             sent.assert_called_once_with(unittest.mock.ANY, "Connect_nbr")
 
     def test_slots_already_available_returns_false(self):
-        with patch.object(ai, "can_try_level_two", return_value=False), \
-             patch.object(ai, "send_command_to_server", return_value="2") as sent:
-            inventory = {"food": 8, "linemate": 1}
+        with patch.object(ai, "send_command_to_server", return_value="2") as sent:
+            inventory = {"food": 8}
             self.assertFalse(ai.try_create_team_slot(MagicMock(), inventory, []))
             sent.assert_called_once_with(unittest.mock.ANY, "Connect_nbr")
 
     def test_no_slots_forks(self):
         responses = iter(["0", "ok"])
-        with patch.object(ai, "can_try_level_two", return_value=False), \
-             patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)) as sent:
-            inventory = {"food": 8, "linemate": 1}
+        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)) as sent:
+            inventory = {"food": 8}
             self.assertTrue(ai.try_create_team_slot(MagicMock(), inventory, []))
             calls = [call.args[1] for call in sent.call_args_list]
             self.assertEqual(calls, ["Connect_nbr", "Fork"])
