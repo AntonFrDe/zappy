@@ -18,5 +18,6 @@ void command_set(server_t *server, client_t *client, const char *arg)
     tile = map_get_tile(server->map, client->player->x, client->player->y);
     client->player->inventory[r]--;
     tile->quantities[r]++;
+    gui_notify_resource_drop(server, client, r);
     client_queue_send(client, "ok\n");
 }

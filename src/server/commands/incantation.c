@@ -88,9 +88,29 @@ static void elevate_players_on_tile(server_t *server, client_t *client)
         if (other->player == NULL)
             continue;
         if (other->player->x == x && other->player->y == y
-            && other->player->level == level)
+            && other->player->level == level) {
             other->player->level++;
+            gui_notify_level(server, other);
+        }
     }
+}
+
+void incantation_notify_start(server_t *server, client_t *client)
+{
+    int ids[SERVER_MAX_CLIENTS];
+    int count = 0;
+    client_t *other;
+
+    ids[count++] = client->id;
+    for (int i = 1; i < server->nfds; i++) {
+        other = server->clients[i];
+        if (other == client || other->player == NULL)
+            continue;
+        if (same_spot_same_level(other->player, client->player))
+            ids[count++] = other->id;
+    }
+    gui_notify_incantation_start(server, client->player->x,
+        client->player->y, client->player->level, ids, count);
 }
 
 void command_incantation(server_t *server, client_t *client, const char *arg)
@@ -98,17 +118,21 @@ void command_incantation(server_t *server, client_t *client, const char *arg)
     char msg[32];
     const elevation_req_t *req;
     tile_t *tile;
+    int64_t x = client->player->x;
+    int64_t y = client->player->y;
 
     (void)arg;
     if (!incantation_check(server, client)) {
         client_queue_send(client, "ko\n");
+        gui_notify_incantation_end(server, x, y, 0);
         return;
     }
     req = &REQUIREMENTS[client->player->level];
-    tile = map_get_tile(server->map, client->player->x, client->player->y);
+    tile = map_get_tile(server->map, x, y);
     for (int r = 0; r < RESOURCE_COUNT; r++)
         tile->quantities[r] -= req->stones[r];
     elevate_players_on_tile(server, client);
+    gui_notify_incantation_end(server, x, y, 1);
     snprintf(msg, sizeof(msg), "Current level: %d\n", client->player->level);
     client_queue_send(client, msg);
 }

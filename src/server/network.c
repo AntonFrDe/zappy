@@ -1,5 +1,6 @@
 #include "../../include/server/network.h"
 #include "../../include/server/command.h"
+#include "../../include/server/gui_protocol.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -52,6 +53,8 @@ int server_init(server_t *server, flags_t *cfg)
     srand((unsigned int)time(NULL));
     map_spawn_resources(server->map);
     egg_list_init(&server->eggs);
+    server->next_client_id = 1;
+    server->next_egg_id = 1;
     for (int i = 0; i < cfg->teams_nb; i++)
         server->slots_remaining[i] = cfg->clients_nb;
     server->fds[0].fd = server->listen_fd;
@@ -87,6 +90,7 @@ static void accept_new_client(server_t *server)
         close(fd);
         return;
     }
+    client->id = server->next_client_id++;
     client_queue_send(client, "WELCOME\n");
     server->clients[server->nfds] = client;
     server->fds[server->nfds].fd = fd;
@@ -130,12 +134,14 @@ static bool handle_team_name(server_t *server, client_t *client,
     //Timmyy !!
     int team_i;
     int64_t egg_x, egg_y;
+    int egg_id = -1;
 
     if (strcmp(name, "GRAPHIC") == 0) {
         client->is_graphic = true;
         client->handshake_done = true;
         client_queue_send(client, "0\n");
         send_map_size(server, client);
+        gui_send_snapshot(server, client);
         return false;
     }
     team_i = find_team_index(server, name);
@@ -147,7 +153,7 @@ static bool handle_team_name(server_t *server, client_t *client,
     server->slots_remaining[team_i]--;
     client->team_index = team_i;
     client->handshake_done = true;
-    if (egg_list_pop_random(&server->eggs, team_i, &egg_x, &egg_y))
+    if (egg_list_pop_random(&server->eggs, team_i, &egg_x, &egg_y, &egg_id))
         client->player = player_create_at(egg_x, egg_y);
     else
         client->player = player_create(server->map);
@@ -155,6 +161,9 @@ static bool handle_team_name(server_t *server, client_t *client,
     snprintf(msg, sizeof(msg), "%u\n", server->slots_remaining[team_i]);
     client_queue_send(client, msg);
     send_map_size(server, client);
+    gui_notify_new_player(server, client);
+    if (egg_id >= 0)
+        gui_notify_egg_hatch(server, egg_id);
     return false;
 }
 

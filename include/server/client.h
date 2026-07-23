@@ -11,6 +11,7 @@
 
     typedef struct client_s {
         int fd;
+        int id;                 // stable, ne bouge pas quand le tableau est decale
         char recv_buf[CLIENT_RECV_BUF_SIZE];
         size_t recv_len;
         char *send_buf;

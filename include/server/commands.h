@@ -2,6 +2,7 @@
     #define COMMANDS_H_
     #include "client.h"
     #include "network.h"
+    #include "gui_protocol.h"
 
     void command_forward(server_t *server, client_t *client, const char *arg);
     void command_right(server_t *server, client_t *client, const char *arg);
@@ -20,5 +21,7 @@
     bool incantation_check(server_t *server, client_t *client);
 // gele (meme ready_at) les mob trouves sur la case
     void incantation_freeze_others(server_t *server, client_t *client);
+// diffuse pic aux GUI (participants = client + mob geles sur la case)
+    void incantation_notify_start(server_t *server, client_t *client);
 
 #endif /* !COMMANDS_H_ */

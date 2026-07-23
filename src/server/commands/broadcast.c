@@ -16,5 +16,6 @@ void command_broadcast(server_t *server, client_t *client, const char *arg)
         snprintf(msg, sizeof(msg), "message %d, %s\n", dir, arg);
         client_queue_send(other, msg);
     }
+    gui_notify_broadcast(server, client, arg);
     client_queue_send(client, "ok\n");
 }
