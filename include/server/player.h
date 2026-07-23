@@ -13,6 +13,8 @@
     } player_t;
 
     player_t *player_create(map_t *map);
+// position fixe (eclosion d'un oeuf), reste du setup identique
+    player_t *player_create_at(int64_t x, int64_t y);
     void player_destroy(player_t *player);
 
 #endif /* !PLAYER_H_ */

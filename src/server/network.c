@@ -51,6 +51,7 @@ int server_init(server_t *server, flags_t *cfg)
     }
     srand((unsigned int)time(NULL));
     map_spawn_resources(server->map);
+    egg_list_init(&server->eggs);
     for (int i = 0; i < cfg->teams_nb; i++)
         server->slots_remaining[i] = cfg->clients_nb;
     server->fds[0].fd = server->listen_fd;
@@ -67,6 +68,7 @@ void server_destroy(server_t *server)
         close(server->listen_fd);
     free(server->slots_remaining);
     map_destroy(server->map);
+    egg_list_destroy(&server->eggs);
 }
 
 static void accept_new_client(server_t *server)
@@ -127,6 +129,7 @@ static bool handle_team_name(server_t *server, client_t *client,
     char msg[64];
     //Timmyy !!
     int team_i;
+    int64_t egg_x, egg_y;
 
     if (strcmp(name, "GRAPHIC") == 0) {
         client->is_graphic = true;
@@ -144,7 +147,10 @@ static bool handle_team_name(server_t *server, client_t *client,
     server->slots_remaining[team_i]--;
     client->team_index = team_i;
     client->handshake_done = true;
-    client->player = player_create(server->map);
+    if (egg_list_pop_random(&server->eggs, team_i, &egg_x, &egg_y))
+        client->player = player_create_at(egg_x, egg_y);
+    else
+        client->player = player_create(server->map);
     client->player->next_food_tick = compute_ready_at(126, server->cfg->freq);
     snprintf(msg, sizeof(msg), "%u\n", server->slots_remaining[team_i]);
     client_queue_send(client, msg);
