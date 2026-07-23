@@ -247,7 +247,7 @@ def request_incantation_help(server_connection, inventory, tile):
     return True
 
 
-def follow_incantation_call(server_connection):
+def follow_incantation_call(server_connection, inventory):
 
     global LAST_INCANTATION_CALL
 
@@ -258,6 +258,8 @@ def follow_incantation_call(server_connection):
         return False
     direction, level = call
 
+    if inventory.get("food", 0) < 3:
+        return False
     if level != PLAYER_LEVEL or direction == 0:
         return False
     if direction in (1, 2, 8):
@@ -476,7 +478,7 @@ def run_ai_loop(server_connection):
             continue
         if request_incantation_help(server_connection, inventory, tile):
             continue
-        if follow_incantation_call(server_connection):
+        if follow_incantation_call(server_connection, inventory):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
