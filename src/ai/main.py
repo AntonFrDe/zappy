@@ -53,8 +53,6 @@ PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
 SURVIVAL_FOOD_LIMIT = 8
-SURVIVAL_SEARCH_MOVES = ["Forward", "Forward", "Left"]
-SURVIVAL_SEARCH_INDEX = 0
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -109,28 +107,11 @@ def send_command_to_server(server_connection, command):
     return receive_response_from_server(server_connection)
 
 
-def choose_survival_search_command():
-
-    global SURVIVAL_SEARCH_INDEX
-
-    command = SURVIVAL_SEARCH_MOVES[SURVIVAL_SEARCH_INDEX]
-    SURVIVAL_SEARCH_INDEX = (SURVIVAL_SEARCH_INDEX + 1) % len(SURVIVAL_SEARCH_MOVES)
-    return command
-
-
-def reset_survival_search():
-
-    global SURVIVAL_SEARCH_INDEX
-
-    SURVIVAL_SEARCH_INDEX = 0
-
-
 def keep_player_alive(server_connection):
 
     inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
 
     if inventory.get("food", 0) > SURVIVAL_FOOD_LIMIT:
-        reset_survival_search()
         return False
 
     look = send_command_to_server(server_connection, "Look")
@@ -140,15 +121,13 @@ def keep_player_alive(server_connection):
         for _ in range(count_visible_item(tile, "food")):
             if send_command_to_server(server_connection, "Take food") != "ok":
                 break
-        reset_survival_search()
         return True
     direction = choose_direction_toward_item(look, "food")
     if direction is not None:
         send_command_to_server(server_connection, direction)
-        reset_survival_search()
         return True
 
-    send_command_to_server(server_connection, choose_survival_search_command())
+    send_command_to_server(server_connection, choice(SURVIVAL_MOVES))
 
     return True
 
