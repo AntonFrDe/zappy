@@ -27,5 +27,8 @@ void command_eject(server_t *server, client_t *client, const char *arg)
         client_queue_send(other, msg);
         ejected_someone = true;
     }
+    if (ejected_someone)
+        egg_list_destroy_at(&server->eggs, client->player->x,
+            client->player->y);
     client_queue_send(client, ejected_someone ? "ok\n" : "ko\n");
 }
