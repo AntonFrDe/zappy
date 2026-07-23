@@ -5,8 +5,10 @@ from pathlib import Path
 from random import choice
 
 AI_DIR = Path(__file__).resolve().parent
-if str(AI_DIR) not in sys.path:
-    sys.path.insert(0, str(AI_DIR))
+PROJECT_AI_DIR = AI_DIR / "src" / "ai"
+for import_path in (AI_DIR, PROJECT_AI_DIR):
+    if import_path.exists() and str(import_path) not in sys.path:
+        sys.path.insert(0, str(import_path))
 
 from strategy import (
     EXPLORATION_FORWARD_TARGETS,
