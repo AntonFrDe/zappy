@@ -43,6 +43,28 @@ Test(render_theme, sibur_mendiane_phiras_thystame_are_rare)
 }
 
 // ---------------------------------------------------------------------------
+// resourceColor: une teinte distincte par ressource (0..6)
+// ---------------------------------------------------------------------------
+
+static bool colorsDiffer(render_theme::RgbColor a, render_theme::RgbColor b)
+{
+    return a.r != b.r || a.g != b.g || a.b != b.b;
+}
+
+Test(render_theme, each_resource_has_a_distinct_color)
+{
+    render_theme::RgbColor colors[7];
+
+    for (int i = 0; i < 7; ++i)
+        colors[i] = render_theme::resourceColor(i);
+
+    for (int i = 0; i < 7; ++i)
+        for (int j = i + 1; j < 7; ++j)
+            cr_assert(colorsDiffer(colors[i], colors[j]),
+                "resourceColor(%d) et resourceColor(%d) sont identiques", i, j);
+}
+
+// ---------------------------------------------------------------------------
 // orientationAngleDeg: North=0, East=1, South=2, West=3
 // ---------------------------------------------------------------------------
 

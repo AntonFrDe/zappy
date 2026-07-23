@@ -185,22 +185,22 @@ void Renderer::drawTiles(const GameState &state)
                 render_theme::PixelPos slotOffset = render_theme::resourceSlotOffsetPx(r);
                 sf::Vector2f slotPos(center.x + slotOffset.x, center.y + slotOffset.y);
 
+                sf::Color resourceColor = toSfColor(render_theme::resourceColor(r));
+
                 if (render_theme::isRareResource(r)) {
                     // pulsation resserree (0.85-1.15) pour ne jamais devenir
-                    // trop petite/pale a l'ecran ; couleur plus saturee que
-                    // le premier essai (RGB(255,157,108)), qui se fondait
-                    // dans le fond noir.
+                    // trop petite/pale a l'ecran.
                     float pulse = 1.f + 0.15f * std::sin(_animPhase * 4.f);
                     sf::CircleShape power(render_theme::kCellSize * 0.13f * pulse);
-                    power.setFillColor(sf::Color(255, 90, 30));
+                    power.setFillColor(resourceColor);
                     power.setOutlineThickness(1.2f);
-                    power.setOutlineColor(sf::Color(255, 230, 160));
+                    power.setOutlineColor(sf::Color(255, 255, 255, 180));
                     power.setOrigin(power.getRadius(), power.getRadius());
                     power.setPosition(slotPos);
                     _window.draw(power);
                 } else {
                     sf::CircleShape pellet(render_theme::kCellSize * 0.05f);
-                    pellet.setFillColor(sf::Color(255, 233, 176));
+                    pellet.setFillColor(resourceColor);
                     pellet.setOrigin(pellet.getRadius(), pellet.getRadius());
                     pellet.setPosition(slotPos);
                     _window.draw(pellet);
@@ -234,7 +234,7 @@ void Renderer::drawEggs(const GameState &state)
 
         render_theme::PixelPos center = render_theme::tileCenterPx(egg.x, egg.y);
         float bob = std::sin(_animPhase * 3.f) * render_theme::kCellSize * 0.05f;
-        float boxSize = render_theme::kCellSize * 0.8f;
+        float boxSize = render_theme::kCellSize * 0.62f;
         float scale = boxSize / 40.f;
         sf::Vector2f bodyPos(center.x, center.y + bob);
 
@@ -266,7 +266,7 @@ void Renderer::drawEggs(const GameState &state)
 void Renderer::drawPlayers(const GameState &state)
 {
     float mouthHalf = render_theme::mouthHalfAngleDeg(_animPhase);
-    float radius = render_theme::kCellSize * 0.4f;
+    float radius = render_theme::kCellSize * 0.32f;
 
     for (const auto &pair : state.players) {
         const Player &player = pair.second;
@@ -278,9 +278,9 @@ void Renderer::drawPlayers(const GameState &state)
 
         drawGlow(_window, toSfVec(center), radius * 2.2f, sf::Color(255, 216, 10), 150);
 
-        sf::CircleShape ring(radius + 3.f);
+        sf::CircleShape ring(radius + 2.5f);
         ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(3.f);
+        ring.setOutlineThickness(2.5f);
         ring.setOutlineColor(toSfColor(team));
         ring.setOrigin(ring.getRadius(), ring.getRadius());
         ring.setPosition(toSfVec(center));
