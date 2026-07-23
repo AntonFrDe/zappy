@@ -52,6 +52,7 @@ from strategy import (
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
+SURVIVAL_FOOD_LIMIT = 8
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -110,14 +111,16 @@ def keep_player_alive(server_connection):
 
     inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
 
-    if inventory.get("food", 0) > 5:
+    if inventory.get("food", 0) > SURVIVAL_FOOD_LIMIT:
         return False
 
     look = send_command_to_server(server_connection, "Look")
     tile = get_current_tile(look)
 
     if "food" in tile:
-        send_command_to_server(server_connection, "Take food")
+        for _ in range(count_visible_item(tile, "food")):
+            if send_command_to_server(server_connection, "Take food") != "ok":
+                break
         return True
     direction = choose_direction_toward_item(look, "food")
     if direction is not None:
