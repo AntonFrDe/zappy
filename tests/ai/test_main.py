@@ -58,6 +58,29 @@ class TestParseInventoryResponse(unittest.TestCase):
         self.assertEqual(result, {"food": 5, "linemate": 2})
 
 
+class TestParseLookResponse(unittest.TestCase):
+    def test_parses_tiles_and_items(self):
+        result = ai.parse_look_response("[food linemate,,player,deraumere]")
+        self.assertEqual(result, [["food", "linemate"], [], ["player"], ["deraumere"]])
+
+
+class TestChooseDirectionTowardItem(unittest.TestCase):
+    def test_left_food_returns_left(self):
+        self.assertEqual(ai.choose_direction_toward_item("[,food,,]", "food"), "Left")
+
+    def test_center_food_returns_forward(self):
+        self.assertEqual(ai.choose_direction_toward_item("[,,food,]", "food"), "Forward")
+
+    def test_right_food_returns_right(self):
+        self.assertEqual(ai.choose_direction_toward_item("[,,,food]", "food"), "Right")
+
+    def test_current_tile_item_returns_none(self):
+        self.assertIsNone(ai.choose_direction_toward_item("[food,,,]", "food"))
+
+    def test_missing_item_returns_none(self):
+        self.assertIsNone(ai.choose_direction_toward_item("[linemate,,,]", "food"))
+
+
 class TestReceiveResponseFromServer(unittest.TestCase):
     def _connection_yielding(self, payload):
         connection = MagicMock()
@@ -438,6 +461,25 @@ class TestTryLevelTwoIncantation(unittest.TestCase):
         with patch.object(ai, "try_first_incantation", return_value=True) as fallback:
             self.assertTrue(ai.try_level_two_incantation(MagicMock(), inventory, []))
             fallback.assert_called_once()
+
+
+class TestTryCurrentIncantation(unittest.TestCase):
+    def setUp(self):
+        ai.PLAYER_LEVEL = 1
+        ai.INCANTATION_HELP_SENT = False
+
+    def test_level_one_counts_self_as_required_player(self):
+        responses = iter(["ok", "Elevation underway"])
+        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)) as sent, \
+             patch.object(ai, "receive_response_from_server", return_value="Current level: 2"):
+            self.assertTrue(ai.try_current_incantation(MagicMock(), {"food": 5, "linemate": 1}, []))
+            calls = [call.args[1] for call in sent.call_args_list]
+            self.assertEqual(calls, ["Set linemate", "Incantation"])
+
+    def test_accepts_direct_current_level_response(self):
+        responses = iter(["ok", "Current level: 2"])
+        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)):
+            self.assertTrue(ai.try_current_incantation(MagicMock(), {"food": 5, "linemate": 1}, []))
 
 
 class TestMoveWhenFoodIsLow(unittest.TestCase):
