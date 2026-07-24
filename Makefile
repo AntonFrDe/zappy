@@ -36,6 +36,7 @@ GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
 # ---------------------------------------------------------------------------
 AI_SRC_DIR	=	src/ai
 AI_MAIN		=	$(AI_SRC_DIR)/main.py
+AI_SRC		=	$(wildcard $(AI_SRC_DIR)/*.py)
 
 # ---------------------------------------------------------------------------
 # Tests (Criterion)
@@ -75,7 +76,7 @@ $(SERVER_NAME):	$(SERVER_OBJ)
 $(GUI_NAME):	$(GUI_OBJ)
 	$(CXX) -o $(GUI_NAME) $(GUI_OBJ) $(GUI_LDLIBS)
 
-$(AI_NAME):	$(AI_MAIN)
+$(AI_NAME):	$(AI_SRC)
 	cp $(AI_MAIN) $(AI_NAME)
 	chmod +x $(AI_NAME)
 
