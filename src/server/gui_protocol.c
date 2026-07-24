@@ -50,6 +50,8 @@ void gui_send_snapshot(server_t *server, client_t *gui)
         (unsigned long long)server->map->width,
         (unsigned long long)server->map->height);
     client_queue_send(gui, msg);
+    snprintf(msg, sizeof(msg), "sgt %u\n", server->cfg->freq);
+    client_queue_send(gui, msg);
     for (int i = 0; i < server->cfg->teams_nb; i++) {
         snprintf(msg, sizeof(msg), "tna %s\n", server->cfg->teams[i]);
         client_queue_send(gui, msg);

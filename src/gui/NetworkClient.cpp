@@ -164,16 +164,17 @@ bool NetworkClient::performHandshake(std::string &errorMsg)
 
 bool NetworkClient::readInitialMapSize(int &width, int &height, std::string &errorMsg)
 {
-    std::string discard;
-    if (!readLineBlocking(discard, errorMsg))
-        return false;
     std::string sizeLine;
+    std::string command;
+    std::string extra;
+
     if (!readLineBlocking(sizeLine, errorMsg))
         return false;
     std::istringstream iss(sizeLine);
-    if (!(iss >> width >> height))
+    if (!(iss >> command >> width >> height) || command != "msz"
+        || width <= 0 || height <= 0 || (iss >> extra))
     {
-        errorMsg = "Taille de map invalide recue du serveur: \"" + sizeLine + "\"";
+        errorMsg = "Commande msz invalide recue du serveur: \"" + sizeLine + "\"";
         return false;
     }
     return true;

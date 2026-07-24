@@ -25,7 +25,11 @@ La connexion se déroule en trois étapes, gérées par `NetworkClient` :
 
 1. **`connectToServer(host, port)`** — résolution DNS (`getaddrinfo`, IPv4/IPv6) puis connexion TCP.
 2. **`performHandshake()`** — attend la ligne `WELCOME` envoyée par le serveur, puis répond `GRAPHIC` pour s'annoncer comme client spectateur.
-3. **`readInitialMapSize(width, height)`** — lit la réponse spécifique que le serveur envoie aux clients GUI juste après le handshake : une ligne `0` (fixe, sans signification, ignorée) suivie d'une ligne `<width> <height>`. `GameState::resizeMap` est appelé directement avec ces valeurs.
+3. **`readInitialMapSize(width, height)`** — lit la commande officielle
+   `msz <width> <height>` envoyée par le serveur juste après le handshake.
+   `GameState::resizeMap` est appelé directement avec ces valeurs, puis les
+   autres commandes initiales (`sgt`, `tna`, `bct`, `pnw`...) sont traitées
+   par `CommandParser`.
 
 Ensuite, `main.cpp` entre dans une boucle qui appelle `NetworkClient::receiveLines` en continu ; chaque ligne reçue est découpée sur `\n` (buffer interne géré en interne, donc une commande coupée entre deux paquets TCP est recollée automatiquement) puis transmise à `CommandParser::dispatch`.
 

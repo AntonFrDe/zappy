@@ -140,8 +140,6 @@ static bool handle_team_name(server_t *server, client_t *client,
     if (strcmp(name, "GRAPHIC") == 0) {
         client->is_graphic = true;
         client->handshake_done = true;
-        client_queue_send(client, "0\n");
-        send_map_size(server, client);
         gui_send_snapshot(server, client);
         return false;
     }
