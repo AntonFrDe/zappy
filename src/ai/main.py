@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import socket
 import sys
+import time
 from pathlib import Path
 from random import choice
+from secrets import token_hex
 
 AI_DIR = Path(__file__).resolve().parent
 PROJECT_AI_DIR = AI_DIR / "src" / "ai"
@@ -50,6 +52,10 @@ from strategy import (EXPLORATION_FORWARD_TARGETS,
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 LAST_INCANTATION_CALL = None
+PLAYER_ID = token_hex(8)
+INCANTATION_CALLS = {}
+READY_PLAYERS = {}
+CALL_LIFETIME = 30
 SURVIVAL_FOOD_LIMIT = 8
 
 
@@ -97,13 +103,101 @@ def remember_incantation_call(message):
 
     global LAST_INCANTATION_CALL
 
-    parts = message.replace(",", "").split()
-    if len(parts) != 4 or parts[2] != "incantation" or not parts[1].isdigit() or not parts[3].isdigit():
+    try:
+        header, payload = message.split(",", 1)
+    except ValueError:
         return
-    direction, level = int(parts[1]), int(parts[3])
+
+    header_parts = header.split()
+    parts = payload.split()
+
+    if len(header_parts) != 2 or header_parts[0] != "message":
+        return
+    if not header_parts[1].isdigit():
+        return
+
+    direction = int(header_parts[1])
+
+    if direction < 0 or direction > 8:
+        return
+
+    if len(parts) == 2 and parts[0] == "incantation":
+        if not parts[1].isdigit() or int(parts[1]) != PLAYER_LEVEL:
+            return
+        LAST_INCANTATION_CALL = (direction, PLAYER_LEVEL)
+        return
+
+    if len(parts) == 4 and parts[:2] == ["incantation", "request"]:
+        save_incantation_call(direction, parts[2], parts[3])
+        return
+    if len(parts) == 5 and parts[:2] == ["incantation", "ready"]:
+        save_ready_player(direction, parts[2], parts[3], parts[4])
+
+
+def save_incantation_call(direction, level_text, caller_id):
+
+    if not level_text.isdigit():
+        return
+
+    level = int(level_text)
+
     if level != PLAYER_LEVEL:
         return
-    LAST_INCANTATION_CALL = (direction, level)
+    INCANTATION_CALLS[caller_id] = (direction, level, time.monotonic())
+
+
+def save_ready_player(direction, level_text, caller_id, player_id):
+
+    if not level_text.isdigit():
+        return
+
+    level = int(level_text)
+
+    if level != PLAYER_LEVEL or caller_id != PLAYER_ID or player_id == PLAYER_ID:
+        return
+    if direction != 0:
+        return
+    READY_PLAYERS[player_id] = time.monotonic()
+
+
+def reset_incantation_calls():
+
+    global LAST_INCANTATION_CALL
+
+    LAST_INCANTATION_CALL = None
+    INCANTATION_CALLS.clear()
+    READY_PLAYERS.clear()
+
+
+def remove_old_calls():
+
+    now = time.monotonic()
+    old_calls = [caller_id for caller_id, call in INCANTATION_CALLS.items() if now - call[2] > CALL_LIFETIME]
+    old_players = [player_id for player_id, last_ready in READY_PLAYERS.items() if now - last_ready > CALL_LIFETIME]
+
+    for caller_id in old_calls:
+        del INCANTATION_CALLS[caller_id]
+    for player_id in old_players:
+        del READY_PLAYERS[player_id]
+
+
+def get_call_to_follow():
+
+    remove_old_calls()
+    callers = [caller_id for caller_id, call in INCANTATION_CALLS.items() if call[1] == PLAYER_LEVEL]
+
+    if not callers:
+        return None
+
+    caller_id = min(callers)
+    direction, level, _ = INCANTATION_CALLS[caller_id]
+    return caller_id, direction, level
+
+
+def count_ready_players():
+
+    remove_old_calls()
+    return len(READY_PLAYERS)
 
 
 def send_command_to_server(server_connection, command):
@@ -187,6 +281,7 @@ def update_player_level(response):
     if level < 1 or level > 8:
         return False
     PLAYER_LEVEL = level
+    reset_incantation_calls()
     return True
 
 
@@ -236,7 +331,14 @@ def try_current_incantation(server_connection, inventory, tile):
         return False
     if inventory.get("food", 0) < 2:
         return False
-    if count_visible_item(tile, "player") < INCANTATION_PLAYERS[PLAYER_LEVEL]:
+    required_players = INCANTATION_PLAYERS[PLAYER_LEVEL]
+    if required_players > 1:
+        call = get_call_to_follow()
+        if call is None or call[0] != PLAYER_ID:
+            return False
+        if count_ready_players() < required_players - 1:
+            return False
+    if count_visible_item(tile, "player") < required_players:
         return False
     if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
         return False
@@ -246,28 +348,43 @@ def try_current_incantation(server_connection, inventory, tile):
     if update_player_level(reponse):
         return True
     if reponse != "Elevation underway":
+        READY_PLAYERS.clear()
         return False
-    return update_player_level(receive_response_from_server(server_connection, "Incantation"))
+    level_up = update_player_level(receive_response_from_server(server_connection, "Incantation"))
+    if not level_up:
+        READY_PLAYERS.clear()
+    return level_up
 
 
 def has_incantation_help_requirements(inventory, tile, required_players):
 
     if inventory.get("food", 0) < 4:
         return False
-    if count_visible_item(tile, "player") >= required_players:
+    enough_players = (count_ready_players() >= required_players - 1
+        and count_visible_item(tile, "player") >= required_players)
+    if enough_players:
         return False
     return has_required_stones_for_level(PLAYER_LEVEL, inventory, tile)
 
 
 def broadcast_incantation_help(server_connection):
 
-    send_command_to_server(server_connection, "Broadcast incantation " + str(PLAYER_LEVEL))
+    INCANTATION_CALLS[PLAYER_ID] = (0, PLAYER_LEVEL, time.monotonic())
+    send_command_to_server(server_connection, "Broadcast incantation request " + str(PLAYER_LEVEL) + " " + PLAYER_ID)
+
+
+def say_ready_for_incantation(server_connection, caller_id):
+
+    send_command_to_server(server_connection, "Broadcast incantation ready " + str(PLAYER_LEVEL) + " "  + caller_id + " " + PLAYER_ID)
 
 
 def request_incantation_help(server_connection, inventory, tile):
 
     required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
     if required_players is None or required_players <= 1:
+        return False
+    call = get_call_to_follow()
+    if call is not None and call[0] != PLAYER_ID:
         return False
     if not has_incantation_help_requirements(inventory, tile, required_players):
         return False
@@ -279,19 +396,28 @@ def follow_incantation_call(server_connection, inventory):
 
     global LAST_INCANTATION_CALL
 
-    call = LAST_INCANTATION_CALL
-    LAST_INCANTATION_CALL = None
-
-    if call is None:
-        return False
-    direction, level = call
+    call = get_call_to_follow()
+    caller_id = None
+    if call is not None:
+        caller_id, direction, level = call
+        if caller_id == PLAYER_ID:
+            return False
+    else:
+        call = LAST_INCANTATION_CALL
+        LAST_INCANTATION_CALL = None
+        if call is None:
+            return False
+        direction, level = call
 
     if inventory.get("food", 0) < 3:
         return False
     if level != PLAYER_LEVEL:
         return False
     if direction == 0:
-        send_command_to_server(server_connection, "Look")
+        if caller_id is None:
+            send_command_to_server(server_connection, "Look")
+        else:
+            say_ready_for_incantation(server_connection, caller_id)
         return True
     if direction in (1, 2, 8):
         send_command_to_server(server_connection, "Forward")
@@ -502,19 +628,19 @@ def run_ai_loop(server_connection):
         tile = get_current_tile(look)
 
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+        if follow_incantation_call(server_connection, inventory):
+            continue
         if prepare_incantation_step(server_connection, inventory, look, tile):
             continue
         if try_current_incantation(server_connection, inventory, tile):
+            continue
+        if request_incantation_help(server_connection, inventory, tile):
             continue
         if len(tile) == 0:
             send_command_to_server(server_connection, "Look")
         if turn_on_empty_tile(server_connection, tile):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
-            continue
-        if request_incantation_help(server_connection, inventory, tile):
-            continue
-        if follow_incantation_call(server_connection, inventory):
             continue
         if try_create_team_slot(server_connection, inventory, tile):
             continue
