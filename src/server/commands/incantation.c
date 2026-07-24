@@ -72,6 +72,7 @@ void incantation_freeze_others(server_t *server, client_t *client)
         if (same_spot_same_level(other->player, client->player)) {
             other->busy = true;
             other->ready_at = client->ready_at;
+            client_queue_send(other, "Elevation underway\n");
         }
     }
 }
@@ -79,6 +80,7 @@ void incantation_freeze_others(server_t *server, client_t *client)
 static void elevate_players_on_tile(server_t *server, client_t *client)
 {
     client_t *other;
+    char msg[32];
     int64_t x = client->player->x;
     int64_t y = client->player->y;
     int level = client->player->level;
@@ -90,6 +92,9 @@ static void elevate_players_on_tile(server_t *server, client_t *client)
         if (other->player->x == x && other->player->y == y
             && other->player->level == level) {
             other->player->level++;
+            snprintf(msg, sizeof(msg), "Current level: %d\n",
+                other->player->level);
+            client_queue_send(other, msg);
             gui_notify_level(server, other);
         }
     }
@@ -115,7 +120,6 @@ void incantation_notify_start(server_t *server, client_t *client)
 
 void command_incantation(server_t *server, client_t *client, const char *arg)
 {
-    char msg[32];
     const elevation_req_t *req;
     tile_t *tile;
     int64_t x = client->player->x;
@@ -133,6 +137,4 @@ void command_incantation(server_t *server, client_t *client, const char *arg)
         tile->quantities[r] -= req->stones[r];
     elevate_players_on_tile(server, client);
     gui_notify_incantation_end(server, x, y, 1);
-    snprintf(msg, sizeof(msg), "Current level: %d\n", client->player->level);
-    client_queue_send(client, msg);
 }
