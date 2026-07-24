@@ -151,10 +151,20 @@ static bool check_food(server_t *server, int idx)
     return false;
 }
 
+// respawn periodique (cf sujet: "upon starting and every 20 time units")
+static void spawn_resources_if_ready(server_t *server)
+{
+    if (!is_ready(server->next_resource_spawn))
+        return;
+    map_spawn_resources(server->map);
+    server->next_resource_spawn = compute_ready_at(20, server->cfg->freq);
+}
+
 void scheduler_tick(server_t *server)
 {
     client_t *client;
 
+    spawn_resources_if_ready(server);
     for (int i = 1; i < server->nfds; i++) {
         client = server->clients[i];
         if (!client->handshake_done || client->is_graphic)

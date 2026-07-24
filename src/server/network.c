@@ -55,6 +55,7 @@ int server_init(server_t *server, flags_t *cfg)
     egg_list_init(&server->eggs);
     server->next_client_id = 1;
     server->next_egg_id = 1;
+    server->next_resource_spawn = compute_ready_at(20, cfg->freq);
     for (int i = 0; i < cfg->teams_nb; i++)
         server->slots_remaining[i] = cfg->clients_nb;
     server->fds[0].fd = server->listen_fd;
