@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -57,6 +58,10 @@ INCANTATION_CALLS = {}
 READY_PLAYERS = {}
 CALL_LIFETIME = 30
 SURVIVAL_FOOD_LIMIT = 8
+START_COMMAND = []
+CHILD_AI = None
+PLAYER_NUMBER = 1
+TEAM_GOAL = 6
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -480,16 +485,56 @@ def if_low_food_seek_food(server_connection, inventory, tile):
     return False
 
 
+def set_start_command(host, port, team, player_number):
+
+    global START_COMMAND, PLAYER_NUMBER
+
+    PLAYER_NUMBER = player_number
+    START_COMMAND = [sys.executable, str(Path(__file__).resolve()),"-p", str(port), "-n", team, "-h", host, "-i", str(player_number + 1)]
+
+
+def child_is_running():
+
+    global CHILD_AI
+
+    if CHILD_AI is None:
+        return False
+    if CHILD_AI.poll() is None:
+        return True
+    CHILD_AI = None
+    return False
+
+
+def start_new_ai():
+
+    global CHILD_AI
+
+    if child_is_running() or not START_COMMAND:
+        return False
+    try:
+        CHILD_AI = subprocess.Popen(START_COMMAND, close_fds=True)
+    except OSError:
+        CHILD_AI = None
+        return False
+    return True
+
+
 def try_create_team_slot(server_connection, inventory, tile):
 
+    if PLAYER_NUMBER >= TEAM_GOAL:
+        return False
+    if child_is_running():
+        return False
     if inventory.get("food", 0) < 8:
         return False
     reponse = send_command_to_server(server_connection, "Connect_nbr")
     if not reponse.isdigit():
         return False
     if int(reponse) > 0:
+        return start_new_ai()
+    if send_command_to_server(server_connection, "Fork") != "ok":
         return False
-    send_command_to_server(server_connection, "Fork")
+    start_new_ai()
     return True
 
 
@@ -630,6 +675,8 @@ def run_ai_loop(server_connection):
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
         if follow_incantation_call(server_connection, inventory):
             continue
+        if try_create_team_slot(server_connection, inventory, tile):
+            continue
         if prepare_incantation_step(server_connection, inventory, look, tile):
             continue
         if try_current_incantation(server_connection, inventory, tile):
@@ -641,8 +688,6 @@ def run_ai_loop(server_connection):
         if turn_on_empty_tile(server_connection, tile):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
-            continue
-        if try_create_team_slot(server_connection, inventory, tile):
             continue
         if if_low_food_seek_food(server_connection, inventory, tile):
             continue
@@ -680,6 +725,8 @@ def main():
     port_argument = int(read_and_get_arguments("-p"))
     team_argument = read_and_get_arguments("-n")
     host_argument = read_and_get_arguments("-h", "localhost")
+    player_number = int(read_and_get_arguments("-i", "1"))
+    set_start_command(host_argument, port_argument, team_argument, player_number)
 
     with socket.create_connection((host_argument, port_argument)) as server_connection:
         receive_response_from_server(server_connection)
