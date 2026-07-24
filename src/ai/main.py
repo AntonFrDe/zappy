@@ -10,14 +10,13 @@ for import_path in (AI_DIR, PROJECT_AI_DIR):
     if import_path.exists() and str(import_path) not in sys.path:
         sys.path.insert(0, str(import_path))
 
-from strategy import (
-    EXPLORATION_FORWARD_TARGETS,
-    EXPLORATION_TURNS,
+from strategy import (EXPLORATION_FORWARD_TARGETS,
     INCANTATION_STONES,
     RESOURCE_PRIORITY,
     SURVIVAL_MOVES,
     can_try_level_two,
     choose_direction_toward_item,
+    count_other_players,
     count_visible_item,
     get_current_tile,
     get_guarded_resource_to_take,
@@ -46,8 +45,7 @@ from strategy import (
     should_take_thystame_first,
     should_turn_near_players,
     should_turn_on_busy_tile,
-    should_wait_before_incantation,
-)
+    should_wait_before_incantation,)
 
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
@@ -63,7 +61,7 @@ def read_and_get_arguments(argument_type, default=None):
     return default
 
 
-def receive_response_from_server(server_connection):
+def receive_response_from_server(server_connection, expected_command=None):
 
     while True:
         data = b""
@@ -82,6 +80,14 @@ def receive_response_from_server(server_connection):
             remember_incantation_call(normal_text)
             continue
         if normal_text.startswith("eject:"):
+            continue
+        if normal_text.startswith("Current level:"):
+            level_updated = update_player_level(normal_text)
+            if expected_command == "Incantation":
+                return normal_text
+            if level_updated:
+                continue
+        if normal_text == "Elevation underway" and expected_command != "Incantation":
             continue
 
         return normal_text
@@ -104,7 +110,7 @@ def send_command_to_server(server_connection, command):
 
     server_connection.sendall((command + "\n").encode())
 
-    return receive_response_from_server(server_connection)
+    return receive_response_from_server(server_connection, command)
 
 
 def keep_player_alive(server_connection):
@@ -122,6 +128,7 @@ def keep_player_alive(server_connection):
             if send_command_to_server(server_connection, "Take food") != "ok":
                 break
         return True
+
     direction = choose_direction_toward_item(look, "food")
     if direction is not None:
         send_command_to_server(server_connection, direction)
@@ -152,15 +159,17 @@ def get_resource_priority():
 
 def choose_exploration_command(tile):
 
-    if count_visible_item(tile, "player") > 0:
+    player_count = count_visible_item(tile, "player")
+
+    if count_other_players(tile) > 0:
         return "Right"
     if "egg" in tile:
         return "Left"
     for resource in EXPLORATION_FORWARD_TARGETS:
         if resource in tile:
             return "Forward"
-    if len(tile) == 0:
-        return choice(EXPLORATION_TURNS)
+    if len(tile) == 0 or len(tile) == player_count:
+        return "Forward"
 
     return choice(SURVIVAL_MOVES)
 
@@ -171,7 +180,13 @@ def update_player_level(response):
 
     if not response.startswith("Current level:"):
         return False
-    PLAYER_LEVEL = int(response.split(":")[1].strip())
+    try:
+        level = int(response.split(":", 1)[1].strip())
+    except (IndexError, ValueError):
+        return False
+    if level < 1 or level > 8:
+        return False
+    PLAYER_LEVEL = level
     return True
 
 
@@ -199,7 +214,7 @@ def try_first_incantation(server_connection, inventory, tile):
     if update_player_level(reponse):
         return True
     if reponse == "Elevation underway":
-        reponse = receive_response_from_server(server_connection)
+        reponse = receive_response_from_server(server_connection, "Incantation")
         if update_player_level(reponse):
             return True
     return False
@@ -221,7 +236,7 @@ def try_current_incantation(server_connection, inventory, tile):
         return False
     if inventory.get("food", 0) < 2:
         return False
-    if count_visible_item(tile, "player") + 1 < INCANTATION_PLAYERS[PLAYER_LEVEL]:
+    if count_visible_item(tile, "player") < INCANTATION_PLAYERS[PLAYER_LEVEL]:
         return False
     if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
         return False
@@ -232,14 +247,14 @@ def try_current_incantation(server_connection, inventory, tile):
         return True
     if reponse != "Elevation underway":
         return False
-    return update_player_level(receive_response_from_server(server_connection))
+    return update_player_level(receive_response_from_server(server_connection, "Incantation"))
 
 
 def has_incantation_help_requirements(inventory, tile, required_players):
 
     if inventory.get("food", 0) < 4:
         return False
-    if count_visible_item(tile, "player") + 1 >= required_players:
+    if count_visible_item(tile, "player") >= required_players:
         return False
     return has_required_stones_for_level(PLAYER_LEVEL, inventory, tile)
 
@@ -307,7 +322,7 @@ def turn_on_empty_tile(server_connection, tile):
     if len(tile) != 0:
         return False
 
-    send_command_to_server(server_connection, "Right")
+    send_command_to_server(server_connection, "Forward")
     return True
 
 
