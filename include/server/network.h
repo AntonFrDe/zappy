@@ -22,6 +22,7 @@
         int next_client_id;
         int next_egg_id;
         struct timespec next_resource_spawn;
+        bool game_over;
     } server_t;
 
     int server_init(server_t *server, flags_t *cfg);

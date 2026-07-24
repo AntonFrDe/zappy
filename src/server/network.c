@@ -211,18 +211,42 @@ static int handle_client_events(server_t *server, int i)
     return 0;
 }
 
+// vide les envois en attente (ex: message "seg" de fin de partie) avant
+// de couper le serveur ; borne pour ne jamais bloquer indefiniment si un
+// client ne lit plus
+static void drain_pending_sends(server_t *server)
+{
+    bool pending;
+
+    for (int attempt = 0; attempt < 50; attempt++) {
+        pending = false;
+        for (int i = 1; i < server->nfds; i++) {
+            server->fds[i].events = server->clients[i]->send_len
+                > server->clients[i]->send_sent ? POLLOUT : 0;
+            pending = pending || server->fds[i].events != 0;
+        }
+        if (!pending)
+            return;
+        if (poll(server->fds, (nfds_t)server->nfds, 100) <= 0)
+            continue;
+        for (int i = 1; i < server->nfds; i++)
+            if (server->fds[i].revents & POLLOUT)
+                client_flush_send(server->clients[i]);
+    }
+}
+
 // Boucle server
 int server_run(server_t *server)
 {
     int ready;
 
-    while (true) {
+    while (!server->game_over) {
         update_poll_events(server);
         ready = poll(server->fds, (nfds_t)server->nfds, 100);
 
         if (ready < 0)
             return -1;
-        
+
         if (server->fds[0].revents & POLLIN)
             accept_new_client(server);
 
@@ -231,5 +255,6 @@ int server_run(server_t *server)
                 i--;
         scheduler_tick(server);
     }
+    drain_pending_sends(server);
     return 0;
 }
