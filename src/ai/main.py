@@ -75,6 +75,14 @@ def read_number(argument, default, minimum, maximum):
     return number
 
 
+def print_usage():
+
+    print("USAGE: ./zappy_ai -p port -n name -h machine")
+    print("  -p port     port number")
+    print("  -n name     name of the team")
+    print("  -h machine  name of the machine (default: localhost)")
+
+
 def read_settings():
 
     port = read_number("-p", None, 1, 65535)
@@ -85,6 +93,10 @@ def read_settings():
 
 
 def main():
+
+    if "--help" in sys.argv[1:]:
+        print_usage()
+        return
 
     host, port, team, player_number = read_settings()
 
