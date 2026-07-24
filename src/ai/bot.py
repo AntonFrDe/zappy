@@ -34,19 +34,69 @@ from strategy import (EXPLORATION_FORWARD_TARGETS,
     should_wait_before_incantation,)
 
 SURVIVAL_FOOD_LIMIT = 8
+SURVIVAL_FOOD_TARGET = 20
+SURVIVAL_INVENTORY_INTERVAL = 5
+SURVIVAL_CONNECTIONS = set()
+SURVIVAL_FORWARD_PENDING = set()
+SURVIVAL_ACTIONS_SINCE_INVENTORY = {}
+SURVIVAL_PATHS = {}
+
+
+def next_survival_move(server_connection):
+
+    path = SURVIVAL_PATHS.setdefault(server_connection, {"run_length": 3, "steps_left": 3, "turns": 0,})
+
+    if path["steps_left"] > 0:
+        path["steps_left"] -= 1
+        return "Forward"
+    path["turns"] += 1
+    if path["turns"] >= 2:
+        path["turns"] = 0
+        path["run_length"] += 1
+    path["steps_left"] = path["run_length"]
+    return "Right"
 
 
 def keep_player_alive(server_connection):
 
-    inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+    was_surviving = server_connection in SURVIVAL_CONNECTIONS
+    actions = SURVIVAL_ACTIONS_SINCE_INVENTORY.get(server_connection, SURVIVAL_INVENTORY_INTERVAL)
+    should_check_inventory = (not was_surviving or actions >= SURVIVAL_INVENTORY_INTERVAL)
+    food = None
 
-    if inventory.get("food", 0) > SURVIVAL_FOOD_LIMIT:
+    if should_check_inventory:
+        inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+        food = inventory.get("food", 0)
+        SURVIVAL_ACTIONS_SINCE_INVENTORY[server_connection] = 0
+
+    if not was_surviving and food is not None and food > SURVIVAL_FOOD_LIMIT:
         return False
+
+    if food is not None and food >= SURVIVAL_FOOD_TARGET:
+        SURVIVAL_CONNECTIONS.discard(server_connection)
+        SURVIVAL_FORWARD_PENDING.discard(server_connection)
+        SURVIVAL_ACTIONS_SINCE_INVENTORY.pop(server_connection, None)
+        SURVIVAL_PATHS.pop(server_connection, None)
+        return False
+
+    SURVIVAL_CONNECTIONS.add(server_connection)
+    SURVIVAL_ACTIONS_SINCE_INVENTORY[server_connection] = (SURVIVAL_ACTIONS_SINCE_INVENTORY.get(server_connection, 0) + 1)
+
+    if server_connection in SURVIVAL_FORWARD_PENDING:
+        SURVIVAL_FORWARD_PENDING.discard(server_connection)
+        send_command_to_server(server_connection, "Forward")
+        return True
+
+    if was_surviving:
+        send_command_to_server(server_connection, "Take food")
+        send_command_to_server(server_connection, next_survival_move(server_connection))
+        return True
 
     look = send_command_to_server(server_connection, "Look")
     tile = get_current_tile(look)
 
     if "food" in tile:
+        SURVIVAL_FORWARD_PENDING.discard(server_connection)
         for _ in range(count_visible_item(tile, "food")):
             if send_command_to_server(server_connection, "Take food") != "ok":
                 break
@@ -54,10 +104,13 @@ def keep_player_alive(server_connection):
 
     direction = choose_direction_toward_item(look, "food")
     if direction is not None:
+        if direction in ("Left", "Right"):
+            SURVIVAL_FORWARD_PENDING.add(server_connection)
         send_command_to_server(server_connection, direction)
         return True
 
-    send_command_to_server(server_connection, choice(SURVIVAL_MOVES))
+    move = "Forward" if was_surviving else choice(SURVIVAL_MOVES)
+    send_command_to_server(server_connection, move)
 
     return True
 
