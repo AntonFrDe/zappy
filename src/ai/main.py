@@ -62,6 +62,11 @@ START_COMMAND = []
 CHILD_AI = None
 PLAYER_NUMBER = 1
 TEAM_GOAL = 6
+CONNECT_WAIT = 5
+ANSWER_WAIT = 360
+SAVED_ANSWERS = {}
+CHILD_STOPPED_AT = None
+RETRY_WAIT = 2
 
 
 def read_and_get_arguments(argument_type, default=None):
@@ -72,18 +77,71 @@ def read_and_get_arguments(argument_type, default=None):
     return default
 
 
+def stop_with_error(message):
+
+    print("zappy_ai: " + message, file=sys.stderr)
+    sys.exit(84)
+
+
+def read_text(argument, default=None):
+
+    try:
+        value = read_and_get_arguments(argument, default)
+    except IndexError:
+        stop_with_error("missing value after " + argument)
+    if value is None or value == "" or value.startswith("-"):
+        stop_with_error("missing value for " + argument)
+    return value
+
+
+def read_number(argument, default, minimum, maximum):
+
+    value = read_text(argument, default)
+    try:
+        number = int(value)
+    except ValueError:
+        stop_with_error(argument + " must be a number")
+    if number < minimum or number > maximum:
+        stop_with_error(argument + " is out of range")
+    return number
+
+
+def read_settings():
+
+    port = read_number("-p", None, 1, 65535)
+    team = read_text("-n")
+    host = read_text("-h", "localhost")
+    player_number = read_number("-i", "1", 1, TEAM_GOAL)
+    return host, port, team, player_number
+
+
+def read_server_line(server_connection):
+
+    saved_data = SAVED_ANSWERS.get(server_connection, b"")
+
+    while b"\n" not in saved_data:
+        try:
+            new_data = server_connection.recv(4096)
+        except TimeoutError:
+            stop_with_error("the server took too long to answer")
+        except OSError:
+            stop_with_error("connection to the server was lost")
+        if not new_data:
+            stop_with_error("the server closed the connection")
+        saved_data += new_data
+
+    line, saved_data = saved_data.split(b"\n", 1)
+    SAVED_ANSWERS[server_connection] = saved_data
+    try:
+        return line.decode().strip()
+    except UnicodeDecodeError:
+        stop_with_error("the server sent an invalid message")
+
+
 def receive_response_from_server(server_connection, expected_command=None):
 
     while True:
-        data = b""
-
-        while not data.endswith(b"\n"):
-            part_of_response = server_connection.recv(1)
-            if not part_of_response:
-                sys.exit(84)
-            data += part_of_response
-
-        normal_text = data.decode().strip()
+        normal_text = read_server_line(server_connection)
 
         if normal_text == "dead":
             sys.exit(0)
@@ -207,7 +265,10 @@ def count_ready_players():
 
 def send_command_to_server(server_connection, command):
 
-    server_connection.sendall((command + "\n").encode())
+    try:
+        server_connection.sendall((command + "\n").encode())
+    except OSError:
+        stop_with_error("could not send a command to the server")
 
     return receive_response_from_server(server_connection, command)
 
@@ -495,27 +556,37 @@ def set_start_command(host, port, team, player_number):
 
 def child_is_running():
 
-    global CHILD_AI
+    global CHILD_AI, CHILD_STOPPED_AT
 
     if CHILD_AI is None:
         return False
     if CHILD_AI.poll() is None:
         return True
     CHILD_AI = None
+    CHILD_STOPPED_AT = time.monotonic()
     return False
+
+
+def can_start_child():
+
+    if CHILD_STOPPED_AT is None:
+        return True
+    return time.monotonic() - CHILD_STOPPED_AT >= RETRY_WAIT
 
 
 def start_new_ai():
 
-    global CHILD_AI
+    global CHILD_AI, CHILD_STOPPED_AT
 
-    if child_is_running() or not START_COMMAND:
+    if child_is_running() or not can_start_child() or not START_COMMAND:
         return False
     try:
         CHILD_AI = subprocess.Popen(START_COMMAND, close_fds=True)
     except OSError:
         CHILD_AI = None
+        CHILD_STOPPED_AT = time.monotonic()
         return False
+    CHILD_STOPPED_AT = None
     return True
 
 
@@ -523,7 +594,7 @@ def try_create_team_slot(server_connection, inventory, tile):
 
     if PLAYER_NUMBER >= TEAM_GOAL:
         return False
-    if child_is_running():
+    if child_is_running() or not can_start_child():
         return False
     if inventory.get("food", 0) < 8:
         return False
@@ -720,19 +791,41 @@ def run_ai_loop(server_connection):
         do_default_action(server_connection, tile)
 
 
+def join_team(server_connection, team):
+
+    if receive_response_from_server(server_connection) != "WELCOME":
+        stop_with_error("the server did not send WELCOME")
+
+    free_places = send_command_to_server(server_connection, team)
+
+    if not free_places.isdigit():
+        stop_with_error("the server refused the team")
+
+    map_size = receive_response_from_server(server_connection).split()
+
+    if len(map_size) != 2 or not all(value.isdigit() for value in map_size):
+        stop_with_error("the server sent an invalid map size")
+    if int(map_size[0]) <= 0 or int(map_size[1]) <= 0:
+        stop_with_error("the server sent an invalid map size")
+
+
 def main():
 
-    port_argument = int(read_and_get_arguments("-p"))
-    team_argument = read_and_get_arguments("-n")
-    host_argument = read_and_get_arguments("-h", "localhost")
-    player_number = int(read_and_get_arguments("-i", "1"))
-    set_start_command(host_argument, port_argument, team_argument, player_number)
+    host, port, team, player_number = read_settings()
 
-    with socket.create_connection((host_argument, port_argument)) as server_connection:
-        receive_response_from_server(server_connection)
-        send_command_to_server(server_connection, team_argument)
-        receive_response_from_server(server_connection)
-        run_ai_loop(server_connection)
+    set_start_command(host, port, team, player_number)
+    try:
+        server_connection = socket.create_connection((host, port), timeout=CONNECT_WAIT)
+    except OSError:
+        stop_with_error("could not connect to the server")
+
+    try:
+        with server_connection:
+            server_connection.settimeout(ANSWER_WAIT)
+            join_team(server_connection, team)
+            run_ai_loop(server_connection)
+    finally:
+        SAVED_ANSWERS.pop(server_connection, None)
 
 
 if __name__ == "__main__":
