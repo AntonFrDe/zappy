@@ -38,8 +38,10 @@
     tile_t *map_get_tile(map_t *map, int64_t x, int64_t y);
     // avance x/y d'une case dans dir, wrap torique inclus
     void map_move(map_t *map, int64_t *x, int64_t *y, direction_t dir);
-    // ajoute des ressources (densite * width * height, min 1 de chaque) ;
-    // appele au demarrage puis toutes les 20 unites de temps (cf sujet)
+    // complete les ressources manquantes jusqu'a la cible
+    // (densite * width * height, min 1 de chaque) ; appele au demarrage
+    // puis toutes les 20 unites de temps (cf sujet) - ne rajoute que le
+    // manquant, ne double jamais ce qui est deja present sur la carte
     void map_spawn_resources(map_t *map);
     const char *resource_name(resource_t r);
     // -1 si nom inconnu
