@@ -1,4 +1,5 @@
 #include "../../../include/server/commands.h"
+#include "../../../include/server/victory.h"
 #include <stdio.h>
 
 typedef struct {
@@ -96,6 +97,7 @@ static void elevate_players_on_tile(server_t *server, client_t *client)
                 other->player->level);
             client_queue_send(other, msg);
             gui_notify_level(server, other);
+            victory_check(server, other->team_index);
         }
     }
 }
