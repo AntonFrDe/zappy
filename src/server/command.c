@@ -173,6 +173,9 @@ void scheduler_tick(server_t *server)
             i--;
             continue;
         }
+        if (client->incantation_owner_id != 0
+            && client->incantation_owner_id != client->id)
+            continue;
         if (client->busy) {
             if (is_ready(client->ready_at))
                 finish_command(server, client);

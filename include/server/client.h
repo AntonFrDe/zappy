@@ -25,6 +25,7 @@
         bool busy;              // une commande est en cours d'execution
         struct timespec ready_at; // instant ou elle se termine
         char *executing_cmd;    // commande en cours (possede la string)
+        int incantation_owner_id; // 0 sinon id de l'initiateur qui le gele
         player_t *player;       // NULL pour le GUI
     } client_t;
 
