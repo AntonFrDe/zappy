@@ -1,4 +1,5 @@
 #include "../../../include/server/commands.h"
+#include "../../../include/server/victory.h"
 #include <stdio.h>
 
 typedef struct {
