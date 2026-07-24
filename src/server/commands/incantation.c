@@ -33,12 +33,17 @@ static int count_players_same_level(server_t *server, client_t *client)
 {
     int count = 0;
     client_t *other;
+    int owner_id = client->incantation_owner_id;
 
     for (int i = 1; i < server->nfds; i++) {
         other = server->clients[i];
         if (other->player == NULL)
             continue;
-        if (same_spot_same_level(other->player, client->player))
+        if (!same_spot_same_level(other->player, client->player))
+            continue;
+        if ((owner_id == client->id
+                && other->incantation_owner_id == owner_id)
+            || (owner_id == 0 && other->incantation_owner_id == 0))
             count++;
     }
     return count;
@@ -66,16 +71,24 @@ void incantation_freeze_others(server_t *server, client_t *client)
 {
     client_t *other;
 
+    client->incantation_owner_id = client->id;
     for (int i = 1; i < server->nfds; i++) {
         other = server->clients[i];
         if (other == client || other->player == NULL)
             continue;
-        if (same_spot_same_level(other->player, client->player)) {
-            other->busy = true;
-            other->ready_at = client->ready_at;
+        if (other->incantation_owner_id == 0
+            && same_spot_same_level(other->player, client->player)) {
+            other->incantation_owner_id = client->id;
             client_queue_send(other, "Elevation underway\n");
         }
     }
+}
+
+void incantation_unfreeze_players(server_t *server, int owner_id)
+{
+    for (int i = 1; i < server->nfds; i++)
+        if (server->clients[i]->incantation_owner_id == owner_id)
+            server->clients[i]->incantation_owner_id = 0;
 }
 
 static void elevate_players_on_tile(server_t *server, client_t *client)
@@ -90,7 +103,8 @@ static void elevate_players_on_tile(server_t *server, client_t *client)
         other = server->clients[i];
         if (other->player == NULL)
             continue;
-        if (other->player->x == x && other->player->y == y
+        if (other->incantation_owner_id == client->id
+            && other->player->x == x && other->player->y == y
             && other->player->level == level) {
             other->player->level++;
             snprintf(msg, sizeof(msg), "Current level: %d\n",
@@ -113,7 +127,8 @@ void incantation_notify_start(server_t *server, client_t *client)
         other = server->clients[i];
         if (other == client || other->player == NULL)
             continue;
-        if (same_spot_same_level(other->player, client->player))
+        if (other->incantation_owner_id == client->id
+            && same_spot_same_level(other->player, client->player))
             ids[count++] = other->id;
     }
     gui_notify_incantation_start(server, client->player->x,
@@ -131,6 +146,7 @@ void command_incantation(server_t *server, client_t *client, const char *arg)
     if (!incantation_check(server, client)) {
         client_queue_send(client, "ko\n");
         gui_notify_incantation_end(server, x, y, 0);
+        incantation_unfreeze_players(server, client->id);
         return;
     }
     req = &REQUIREMENTS[client->player->level];
@@ -139,4 +155,5 @@ void command_incantation(server_t *server, client_t *client, const char *arg)
         tile->quantities[r] -= req->stones[r];
     elevate_players_on_tile(server, client);
     gui_notify_incantation_end(server, x, y, 1);
+    incantation_unfreeze_players(server, client->id);
 }

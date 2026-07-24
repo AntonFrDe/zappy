@@ -1,5 +1,6 @@
 #include "../../include/server/network.h"
 #include "../../include/server/command.h"
+#include "../../include/server/commands.h"
 #include "../../include/server/gui_protocol.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -8,6 +9,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
+#include <errno.h>
 
 static int create_listen_socket(int port)
 {
@@ -96,17 +98,23 @@ static void accept_new_client(server_t *server)
     server->clients[server->nfds] = client;
     server->fds[server->nfds].fd = fd;
     server->fds[server->nfds].events = POLLIN;
+    server->fds[server->nfds].revents = 0;
     server->nfds++;
 }
 
 void disconnect_client(server_t *server, int client_idx)
 {
+    int owner_id = server->clients[client_idx]->id;
+
+    incantation_unfreeze_players(server, owner_id);
     client_destroy(server->clients[client_idx]);
     for (int i = client_idx; i < server->nfds - 1; i++) {
         server->clients[i] = server->clients[i + 1];
         server->fds[i] = server->fds[i + 1];
     }
     server->nfds--;
+    server->clients[server->nfds] = NULL;
+    server->fds[server->nfds] = (struct pollfd){.fd = -1};
 }
 
 static int find_team_index(server_t *server, const char *name)
@@ -194,8 +202,9 @@ static void update_poll_events(server_t *server)
 static int handle_client_events(server_t *server, int i)
 {
     int n;
+    short revents = server->fds[i].revents;
 
-    if (server->fds[i].revents & POLLIN) {
+    if (revents & POLLIN) {
         n = client_read(server->clients[i]);
         if (n <= 0) {
             disconnect_client(server, i);
@@ -204,8 +213,16 @@ static int handle_client_events(server_t *server, int i)
         if (process_client_input(server, i))
             return 1;
     }
-    if (server->fds[i].revents & POLLOUT)
-        client_flush_send(server->clients[i]);
+    if (revents & POLLOUT) {
+        if (client_flush_send(server->clients[i]) < 0) {
+            disconnect_client(server, i);
+            return 1;
+        }
+    }
+    if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        disconnect_client(server, i);
+        return 1;
+    }
     return 0;
 }
 
@@ -227,9 +244,14 @@ static void drain_pending_sends(server_t *server)
             return;
         if (poll(server->fds, (nfds_t)server->nfds, 100) <= 0)
             continue;
-        for (int i = 1; i < server->nfds; i++)
-            if (server->fds[i].revents & POLLOUT)
-                client_flush_send(server->clients[i]);
+        for (int i = 1; i < server->nfds; i++) {
+            if (server->fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)
+                || ((server->fds[i].revents & POLLOUT)
+                    && client_flush_send(server->clients[i]) < 0)) {
+                disconnect_client(server, i);
+                i--;
+            }
+        }
     }
 }
 
@@ -237,20 +259,23 @@ static void drain_pending_sends(server_t *server)
 int server_run(server_t *server)
 {
     int ready;
+    int polled_nfds;
 
     while (!server->game_over) {
         update_poll_events(server);
-        ready = poll(server->fds, (nfds_t)server->nfds, 100);
+        polled_nfds = server->nfds;
+        ready = poll(server->fds, (nfds_t)polled_nfds, 100);
 
+        if (ready < 0 && errno == EINTR)
+            continue;
         if (ready < 0)
             return -1;
 
-        if (server->fds[0].revents & POLLIN)
-            accept_new_client(server);
-
-        for (int i = 1; i < server->nfds; i++)
+        for (int i = 1; i < polled_nfds && i < server->nfds; i++)
             if (handle_client_events(server, i))
                 i--;
+        if (server->fds[0].revents & POLLIN)
+            accept_new_client(server);
         scheduler_tick(server);
     }
     drain_pending_sends(server);

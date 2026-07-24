@@ -1,6 +1,8 @@
 #include "../../include/server/client.h"
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 client_t *client_create(int fd)
@@ -36,7 +38,10 @@ int client_read(client_t *client)
 
     if (space == 0)
         return -1;
-    n = read(client->fd, client->recv_buf + client->recv_len, space);
+    n = recv(client->fd, client->recv_buf + client->recv_len, space,
+        MSG_DONTWAIT);
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+        return 1;
     if (n <= 0)
         return (int)n;
     client->recv_len += (size_t)n;
@@ -82,7 +87,10 @@ int client_flush_send(client_t *client)
 
     if (remaining == 0)
         return 0;
-    n = write(client->fd, client->send_buf + client->send_sent, remaining);
+    n = send(client->fd, client->send_buf + client->send_sent, remaining,
+        MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+        return 0;
     if (n <= 0)
         return -1;
     client->send_sent += (size_t)n;
