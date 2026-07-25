@@ -42,8 +42,12 @@ struct Player {
 
 struct Team {
     std::string name;
+    // Ids des joueurs actuellement vivants et suivis (retire a la mort,
+    // voir CommandParser::handlePdi). spawnedCount, lui, ne diminue
+    // jamais : c'est le total affiche par le HUD (ex: "2/5 vivant(s)").
     std::vector<int> playerIds;
     std::vector<int> eggIds;
+    int spawnedCount = 0;
 };
 
 struct Incantation {

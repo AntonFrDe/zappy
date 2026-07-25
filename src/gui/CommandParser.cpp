@@ -96,6 +96,16 @@ void CommandParser::removeEggIdFromOwningTeam(const Egg &egg)
     eggIds.erase(std::remove(eggIds.begin(), eggIds.end(), egg.id), eggIds.end());
 }
 
+void CommandParser::removePlayerIdFromTeam(const std::string &teamName, int playerId)
+{
+    auto teamIt = _state.teams.find(teamName);
+    if (teamIt == _state.teams.end())
+        return;
+
+    auto &ids = teamIt->second.playerIds;
+    ids.erase(std::remove(ids.begin(), ids.end(), playerId), ids.end());
+}
+
 void CommandParser::dispatch(const std::string &line)
 {
     if (line.empty())
@@ -210,7 +220,17 @@ void CommandParser::handlePnw(std::istringstream &args)
 
     auto teamIt = _state.teams.find(team);
     if (teamIt != _state.teams.end())
-        teamIt->second.playerIds.push_back(id);
+    {
+        auto &ids = teamIt->second.playerIds;
+        // pnw peut arriver deux fois pour le meme id (snapshot renvoye,
+        // ligne dupliquee...) : ne pas dupliquer dans la liste de l'equipe,
+        // ni recompter un spawn qui a deja ete compte.
+        if (std::find(ids.begin(), ids.end(), id) == ids.end())
+        {
+            ids.push_back(id);
+            teamIt->second.spawnedCount++;
+        }
+    }
 
     std::cout << "[parser] nouveau joueur #" << id << " (" << team << ") en (" << x << "," << y << ")" << std::endl;
 }
@@ -444,7 +464,9 @@ void CommandParser::handlePdi(std::istringstream &args)
         // indefiniment avec alive=false : l'animation de mort n'en depend
         // pas (TransientEffect vit independamment dans state.effects),
         // donc rien n'est perdu visuellement, et l'etat ne grossit plus
-        // sans fin sur une longue partie.
+        // sans fin sur une longue partie. Team::spawnedCount (jamais
+        // decremente) reste le total affiche par le HUD.
+        removePlayerIdFromTeam(player->team, id);
         _state.players.erase(id);
     }
 

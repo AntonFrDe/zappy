@@ -904,7 +904,7 @@ void Renderer::drawHud(const GameState &state)
         _window.draw(swatch);
 
         drawText(team.name + "  " + std::to_string(aliveCount) + "/"
-            + std::to_string(team.playerIds.size()) + " vivant(s)",
+            + std::to_string(team.spawnedCount) + " vivant(s)",
             sf::Vector2f(x + 16.f, y), 13, sf::Color::White);
         y += 18.f;
 

@@ -99,6 +99,35 @@ Test(command_parser, pnw_adds_player_and_links_team)
     Team &team = state.teams.at("rouge");
     cr_assert_eq(team.playerIds.size(), (size_t)1);
     cr_assert_eq(team.playerIds[0], 1);
+    cr_assert_eq(team.spawnedCount, 1);
+}
+
+Test(command_parser, pnw_twice_for_same_id_does_not_duplicate_in_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.playerIds.size(), (size_t)1);
+    cr_assert_eq(team.spawnedCount, 1);
+}
+
+Test(command_parser, pdi_removes_id_from_team_but_keeps_spawned_count)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pdi #1");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.playerIds.size(), (size_t)0);
+    cr_assert_eq(team.spawnedCount, 1);
 }
 
 Test(command_parser, pnw_invalid_id_ignored)
