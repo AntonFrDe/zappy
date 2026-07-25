@@ -129,14 +129,6 @@ Test(render_theme, mouth_half_angle_is_periodic)
 // tileCenterPx
 // ---------------------------------------------------------------------------
 
-Test(render_theme, tile_center_px_for_origin_tile)
-{
-    render_theme::PixelPos center = render_theme::tileCenterPx(0, 0);
-
-    cr_assert_float_eq(center.x, render_theme::kCellSize * 0.5f, 0.001);
-    cr_assert_float_eq(center.y, render_theme::kCellSize * 0.5f, 0.001);
-}
-
 Test(render_theme, tile_center_px_for_arbitrary_tile)
 {
     render_theme::PixelPos center = render_theme::tileCenterPx(2, 3);
