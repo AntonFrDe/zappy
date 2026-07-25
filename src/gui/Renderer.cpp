@@ -272,15 +272,26 @@ namespace {
 constexpr float kHudWidth = 260.f;
 constexpr float kHudMinHeight = 500.f;
 
-// Taille totale de fenetre = carte + panneau HUD.
+// Taille maximale de fenetre a l'ouverture (une grande carte ne doit pas
+// creer une fenetre plus grande que l'ecran) : la camera (zoom/pan) permet
+// ensuite de naviguer dans une carte qui ne tient pas entierement a l'ecran.
+constexpr float kMaxWindowWidth = 1280.f;
+constexpr float kMaxWindowHeight = 800.f;
+
+constexpr float kMinZoom = 0.2f;
+constexpr float kMaxZoom = 5.f;
+
+// Taille totale de fenetre = carte + panneau HUD, plafonnee pour ne pas
+// depasser une taille raisonnable meme sur une tres grande carte.
 sf::Vector2u computeWindowSize(int mapWidth, int mapHeight)
 {
     float mapPxWidth = static_cast<float>(std::max(mapWidth, 1)) * render_theme::kCellSize;
     float mapPxHeight = static_cast<float>(std::max(mapHeight, 1)) * render_theme::kCellSize;
 
-    return sf::Vector2u(
-        static_cast<unsigned int>(mapPxWidth + kHudWidth),
-        static_cast<unsigned int>(std::max(mapPxHeight, kHudMinHeight)));
+    float width = std::min(mapPxWidth + kHudWidth, kMaxWindowWidth);
+    float height = std::min(std::max(mapPxHeight, kHudMinHeight), kMaxWindowHeight);
+
+    return sf::Vector2u(static_cast<unsigned int>(width), static_cast<unsigned int>(height));
 }
 
 }
@@ -293,6 +304,8 @@ Renderer::Renderer(int initialMapWidth, int initialMapHeight)
       _lastHeight(initialMapHeight),
       _animPhase(0.f),
       _hasFont(loadAnySystemFont(_font)),
+      _zoomLevel(1.f),
+      _panOffset(0.f, 0.f),
       _hasPendingClick(false),
       _pendingClickPx(0, 0),
       _selectedPlayerId(-1),
@@ -315,9 +328,38 @@ void Renderer::pollEvents()
     while (_window.pollEvent(event)) {
         if (event.type == sf::Event::Closed)
             _window.close();
+
         if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
             _hasPendingClick = true;
             _pendingClickPx = sf::Vector2i(event.mouseButton.x, event.mouseButton.y);
+        }
+
+        // La reponse effective au redimensionnement (recalcul du viewport
+        // letterboxe) se fait chaque frame dans updateMapView(), a partir
+        // de _window.getSize() qui reflete deja la nouvelle taille : on
+        // consomme quand meme l'evenement explicitement pour ne pas
+        // laisser SFML avec une vue par defaut perimee entre deux frames.
+        if (event.type == sf::Event::Resized) {
+            sf::FloatRect visibleArea(0.f, 0.f,
+                static_cast<float>(event.size.width), static_cast<float>(event.size.height));
+            _window.setView(sf::View(visibleArea));
+        }
+
+        if (event.type == sf::Event::MouseWheelScrolled) {
+            float factor = event.mouseWheelScroll.delta > 0.f ? 1.1f : (1.f / 1.1f);
+            _zoomLevel = std::max(kMinZoom, std::min(_zoomLevel * factor, kMaxZoom));
+        }
+
+        if (event.type == sf::Event::KeyPressed) {
+            constexpr float kPanStepPx = 40.f;
+            if (event.key.code == sf::Keyboard::Left)
+                _panOffset.x -= kPanStepPx;
+            else if (event.key.code == sf::Keyboard::Right)
+                _panOffset.x += kPanStepPx;
+            else if (event.key.code == sf::Keyboard::Up)
+                _panOffset.y -= kPanStepPx;
+            else if (event.key.code == sf::Keyboard::Down)
+                _panOffset.y += kPanStepPx;
         }
     }
 }
@@ -332,6 +374,39 @@ void Renderer::ensureWindowSize(int mapWidth, int mapHeight)
     _window.setSize(computeWindowSize(mapWidth, mapHeight));
     _lastWidth = mapWidth;
     _lastHeight = mapHeight;
+    // Nouvelle carte (ou premier msz) : repart d'une camera neutre plutot
+    // que de garder le zoom/pan de la carte precedente.
+    _zoomLevel = 1.f;
+    _panOffset = sf::Vector2f(0.f, 0.f);
+}
+
+void Renderer::updateMapView(int mapWidth, int mapHeight)
+{
+    sf::Vector2u winSize = _window.getSize();
+    float mapAreaWidthPx = std::max(1.f, static_cast<float>(winSize.x) - kHudWidth);
+    float mapAreaHeightPx = std::max(1.f, static_cast<float>(winSize.y));
+
+    float mapPxWidth = static_cast<float>(std::max(mapWidth, 1)) * render_theme::kCellSize;
+    float mapPxHeight = static_cast<float>(std::max(mapHeight, 1)) * render_theme::kCellSize;
+
+    // Letterbox : la carte garde son ratio d'aspect au lieu d'etre etiree
+    // pour remplir toute la zone disponible.
+    float fitScale = std::min(mapAreaWidthPx / mapPxWidth, mapAreaHeightPx / mapPxHeight);
+    float letterboxWidthPx = mapPxWidth * fitScale;
+    float letterboxHeightPx = mapPxHeight * fitScale;
+    float letterboxLeftPx = (mapAreaWidthPx - letterboxWidthPx) / 2.f;
+    float letterboxTopPx = (mapAreaHeightPx - letterboxHeightPx) / 2.f;
+
+    _mapViewportPx = sf::FloatRect(letterboxLeftPx, letterboxTopPx, letterboxWidthPx, letterboxHeightPx);
+
+    _mapView.setViewport(sf::FloatRect(
+        letterboxLeftPx / static_cast<float>(winSize.x),
+        letterboxTopPx / static_cast<float>(winSize.y),
+        letterboxWidthPx / static_cast<float>(winSize.x),
+        letterboxHeightPx / static_cast<float>(winSize.y)));
+
+    _mapView.setSize(mapPxWidth / _zoomLevel, mapPxHeight / _zoomLevel);
+    _mapView.setCenter(mapPxWidth / 2.f + _panOffset.x, mapPxHeight / 2.f + _panOffset.y);
 }
 
 void Renderer::drawGrid(int mapWidth, int mapHeight)
@@ -721,14 +796,17 @@ void Renderer::processPendingClick(const GameState &state)
         return;
     _hasPendingClick = false;
 
-    float mapPxWidth = static_cast<float>(state.mapWidth) * render_theme::kCellSize;
-    float clickX = static_cast<float>(_pendingClickPx.x);
-    float clickY = static_cast<float>(_pendingClickPx.y);
-
-    // Clic hors de la zone carte (dans le panneau HUD, ou hors fenetre) :
-    // rien a selectionner.
-    if (clickX < 0.f || clickX >= mapPxWidth || clickY < 0.f)
+    // Clic hors du rectangle ecran occupe par la vue carte (panneau HUD,
+    // ou bande noire du letterbox) : rien a selectionner.
+    if (!_mapViewportPx.contains(static_cast<float>(_pendingClickPx.x), static_cast<float>(_pendingClickPx.y)))
         return;
+
+    // Convertit le pixel ecran en coordonnees "carte" (en tenant compte du
+    // zoom/pan courants de _mapView), pour un hit-test correct meme
+    // lorsque la camera n'est pas a son etat par defaut.
+    sf::Vector2f mapPos = _window.mapPixelToCoords(_pendingClickPx, _mapView);
+    float clickX = mapPos.x;
+    float clickY = mapPos.y;
 
     // Joueur le plus proche du clic, dans un rayon raisonnable (permet de
     // cliquer un joueur meme sans viser exactement son centre).
@@ -787,11 +865,15 @@ void Renderer::drawHud(const GameState &state)
     };
 
     sf::Vector2u winSize = _window.getSize();
-    float mapPxWidth = static_cast<float>(state.mapWidth) * render_theme::kCellSize;
-    float panelWidth = static_cast<float>(winSize.x) - mapPxWidth;
+    // La zone carte passe par une camera (zoom/pan/letterbox) depuis
+    // updateMapView() : le panneau HUD occupe toujours exactement
+    // kHudWidth a droite de la fenetre, quelle que soit la taille reelle
+    // (en pixels carte) de la carte affichee.
+    float hudPanelX = std::max(0.f, static_cast<float>(winSize.x) - kHudWidth);
+    float panelWidth = static_cast<float>(winSize.x) - hudPanelX;
 
     sf::RectangleShape panel(sf::Vector2f(panelWidth, static_cast<float>(winSize.y)));
-    panel.setPosition(mapPxWidth, 0.f);
+    panel.setPosition(hudPanelX, 0.f);
     panel.setFillColor(sf::Color(18, 18, 30, 255));
     _window.draw(panel);
 
@@ -799,7 +881,7 @@ void Renderer::drawHud(const GameState &state)
         return;
 
     const float padding = 12.f;
-    float x = mapPxWidth + padding;
+    float x = hudPanelX + padding;
     float y = padding;
 
     drawText("EQUIPES", sf::Vector2f(x, y), 14, sf::Color(180, 180, 200), true);
@@ -924,16 +1006,24 @@ void Renderer::draw(GameState &state, float dt)
     state.advanceEggAnimations(dt);
     state.advanceEffects(dt);
     updatePlayerAnimations(state, dt);
-    processPendingClick(state);
     ensureWindowSize(state.mapWidth, state.mapHeight);
+    updateMapView(state.mapWidth, state.mapHeight);
+    processPendingClick(state);
 
     _window.clear(sf::Color::Black);
+
+    // Zone carte : passe par la camera (zoom/pan/letterbox).
+    _window.setView(_mapView);
     drawGrid(state.mapWidth, state.mapHeight);
     drawTiles(state);
     drawIncantations(state);
     drawEggs(state);
     drawPlayers(state);
     drawEffects(state);
+
+    // HUD et bandeau de fin : coordonnees ecran fixes, jamais affectees
+    // par le zoom/pan de la carte.
+    _window.setView(_window.getDefaultView());
     drawHud(state);
     drawGameOverBanner(state);
     _window.display();
