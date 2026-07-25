@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -410,33 +412,75 @@ void Renderer::drawEggs(const GameState &state)
 void Renderer::drawPlayers(const GameState &state)
 {
     float mouthHalf = render_theme::mouthHalfAngleDeg(_animPhase);
-    float radius = render_theme::kCellSize * 0.32f;
 
+    // Regroupe les joueurs vivants par tuile visuelle (position animee
+    // arrondie a la case la plus proche) : sans ca, plusieurs joueurs sur
+    // la meme case se dessinaient exactement les uns sur les autres.
+    std::map<std::pair<int, int>, std::vector<const Player *>> clusters;
     for (const auto &pair : state.players) {
         const Player &player = pair.second;
         if (!player.alive)
             continue;
+        int tileX = static_cast<int>(std::lround(player.animX));
+        int tileY = static_cast<int>(std::lround(player.animY));
+        clusters[{tileX, tileY}].push_back(&player);
+    }
 
-        render_theme::PixelPos center = render_theme::tileCenterPxF(player.animX, player.animY);
-        render_theme::RgbColor team = render_theme::teamColor(player.team);
+    for (const auto &clusterEntry : clusters) {
+        const std::vector<const Player *> &group = clusterEntry.second;
+        std::size_t count = group.size();
 
-        drawGlow(_window, toSfVec(center), radius * 2.2f, sf::Color(255, 216, 10), 150);
+        // Centre la case sur la position moyenne du groupe plutot que sur
+        // la case arrondie : des joueurs qui convergent vers la meme case
+        // depuis des directions differentes se regroupent en douceur au
+        // lieu de sauter d'un coup a la position finale.
+        float cx = 0.f, cy = 0.f;
+        for (const Player *player : group) {
+            cx += player->animX;
+            cy += player->animY;
+        }
+        cx /= static_cast<float>(count);
+        cy /= static_cast<float>(count);
+        sf::Vector2f clusterCenter = toSfVec(render_theme::tileCenterPxF(cx, cy));
 
-        sf::CircleShape ring(radius + 2.5f);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(2.5f);
-        ring.setOutlineColor(toSfColor(team));
-        ring.setOrigin(ring.getRadius(), ring.getRadius());
-        ring.setPosition(toSfVec(center));
-        _window.draw(ring);
+        // Reduit la taille et etale les joueurs en cercle quand ils sont
+        // plusieurs sur la meme case, pour qu'ils restent distinguables
+        // au lieu de se superposer.
+        float scale = count == 1 ? 1.f : std::max(0.45f, 1.f - 0.12f * static_cast<float>(count - 1));
+        float radius = render_theme::kCellSize * 0.32f * scale;
+        float spreadRadius = count == 1 ? 0.f : render_theme::kCellSize * 0.24f;
 
-        sf::ConvexShape pacman = makePacmanShape(radius, mouthHalf);
-        pacman.setFillColor(sf::Color(255, 216, 10));
-        pacman.setOutlineThickness(1.5f);
-        pacman.setOutlineColor(sf::Color(120, 90, 0));
-        pacman.setPosition(toSfVec(center));
-        pacman.setRotation(render_theme::orientationAngleDeg(static_cast<int>(player.orientation)));
-        _window.draw(pacman);
+        for (std::size_t i = 0; i < count; ++i) {
+            const Player &player = *group[i];
+            sf::Vector2f center = clusterCenter;
+
+            if (count > 1) {
+                float angleDeg = static_cast<float>(i) * (360.f / static_cast<float>(count)) - 90.f;
+                float rad = angleDeg * kPi / 180.f;
+                center.x += std::cos(rad) * spreadRadius;
+                center.y += std::sin(rad) * spreadRadius;
+            }
+
+            render_theme::RgbColor team = render_theme::teamColor(player.team);
+
+            drawGlow(_window, center, radius * 2.2f, sf::Color(255, 216, 10), count == 1 ? 150 : 90);
+
+            sf::CircleShape ring(radius + 2.5f * scale);
+            ring.setFillColor(sf::Color::Transparent);
+            ring.setOutlineThickness(2.5f * scale);
+            ring.setOutlineColor(toSfColor(team));
+            ring.setOrigin(ring.getRadius(), ring.getRadius());
+            ring.setPosition(center);
+            _window.draw(ring);
+
+            sf::ConvexShape pacman = makePacmanShape(radius, mouthHalf);
+            pacman.setFillColor(sf::Color(255, 216, 10));
+            pacman.setOutlineThickness(1.5f);
+            pacman.setOutlineColor(sf::Color(120, 90, 0));
+            pacman.setPosition(center);
+            pacman.setRotation(render_theme::orientationAngleDeg(static_cast<int>(player.orientation)));
+            _window.draw(pacman);
+        }
     }
 }
 
