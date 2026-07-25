@@ -236,6 +236,32 @@ sf::ContextSettings makeAntialiasedSettings()
 
 }
 
+namespace {
+
+// Aucune police n'est embarquee dans le projet : on tente quelques chemins
+// systeme usuels (Linux principalement) et on se contente de ne pas
+// afficher de texte si aucun ne fonctionne, plutot que de planter.
+bool loadAnySystemFont(sf::Font &font)
+{
+    static const char *kCandidatePaths[] = {
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+    };
+
+    for (const char *path : kCandidatePaths)
+        if (font.loadFromFile(path))
+            return true;
+    return false;
+}
+
+}
+
 Renderer::Renderer(int initialMapWidth, int initialMapHeight)
     : _window(sf::VideoMode(
           static_cast<unsigned int>(std::max(initialMapWidth, 1) * render_theme::kCellSize),
@@ -243,7 +269,8 @@ Renderer::Renderer(int initialMapWidth, int initialMapHeight)
           "Zappy GUI", sf::Style::Default, makeAntialiasedSettings()),
       _lastWidth(initialMapWidth),
       _lastHeight(initialMapHeight),
-      _animPhase(0.f)
+      _animPhase(0.f),
+      _hasFont(loadAnySystemFont(_font))
 {
     _window.setVerticalSyncEnabled(true);
 }
@@ -507,6 +534,47 @@ void Renderer::updatePlayerAnimations(GameState &state, float dt)
     }
 }
 
+void Renderer::drawGameOverBanner(const GameState &state)
+{
+    if (!state.gameOver)
+        return;
+
+    sf::Vector2u size = _window.getSize();
+    sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(size.x), static_cast<float>(size.y)));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    _window.draw(overlay);
+
+    render_theme::RgbColor teamColor = render_theme::teamColor(state.winningTeam);
+    sf::Vector2f center(static_cast<float>(size.x) / 2.f, static_cast<float>(size.y) / 2.f);
+
+    float pulse = 0.85f + 0.15f * std::sin(_animPhase * 3.f);
+    sf::CircleShape banner(std::min(size.x, size.y) * 0.28f * pulse);
+    banner.setFillColor(sf::Color::Transparent);
+    banner.setOutlineThickness(4.f);
+    banner.setOutlineColor(toSfColor(teamColor));
+    banner.setOrigin(banner.getRadius(), banner.getRadius());
+    banner.setPosition(center);
+    _window.draw(banner);
+
+    if (!_hasFont)
+        return;
+
+    sf::Text title("VICTOIRE", _font, 28);
+    title.setStyle(sf::Text::Bold);
+    title.setFillColor(sf::Color::White);
+    sf::FloatRect titleBounds = title.getLocalBounds();
+    title.setOrigin(titleBounds.left + titleBounds.width / 2.f, titleBounds.top + titleBounds.height / 2.f);
+    title.setPosition(center.x, center.y - 22.f);
+    _window.draw(title);
+
+    sf::Text teamText("Equipe " + state.winningTeam, _font, 18);
+    teamText.setFillColor(toSfColor(teamColor));
+    sf::FloatRect teamBounds = teamText.getLocalBounds();
+    teamText.setOrigin(teamBounds.left + teamBounds.width / 2.f, teamBounds.top + teamBounds.height / 2.f);
+    teamText.setPosition(center.x, center.y + 14.f);
+    _window.draw(teamText);
+}
+
 void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
@@ -520,5 +588,6 @@ void Renderer::draw(GameState &state, float dt)
     drawIncantations(state);
     drawEggs(state);
     drawPlayers(state);
+    drawGameOverBanner(state);
     _window.display();
 }

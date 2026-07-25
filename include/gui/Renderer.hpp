@@ -27,6 +27,8 @@ class Renderer
         int _lastWidth;
         int _lastHeight;
         float _animPhase;
+        sf::Font _font;
+        bool _hasFont;
 
         void ensureWindowSize(int mapWidth, int mapHeight);
         // Rapproche Player::animX/animY de (x, y) d'une fraction de la
@@ -38,6 +40,11 @@ class Renderer
         void drawIncantations(const GameState &state);
         void drawEggs(const GameState &state);
         void drawPlayers(const GameState &state);
+        // N'affiche du texte que si une police a pu etre chargee (voir
+        // constructeur) : le projet n'en embarque pas, donc plusieurs
+        // chemins systeme usuels sont tentes, sans jamais planter si aucun
+        // n'existe (bandeau colore affiche quand meme, sans le libelle).
+        void drawGameOverBanner(const GameState &state);
 };
 
 #endif /* !GUI_RENDERER_HPP_ */
