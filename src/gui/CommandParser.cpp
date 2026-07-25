@@ -82,6 +82,20 @@ bool CommandParser::isInMapBounds(int x, int y) const
     return x >= 0 && y >= 0 && x < _state.mapWidth && y < _state.mapHeight;
 }
 
+void CommandParser::removeEggIdFromOwningTeam(const Egg &egg)
+{
+    Player *parent = egg.playerId >= 0 ? _state.findPlayer(egg.playerId) : nullptr;
+    if (!parent)
+        return;
+
+    auto teamIt = _state.teams.find(parent->team);
+    if (teamIt == _state.teams.end())
+        return;
+
+    auto &eggIds = teamIt->second.eggIds;
+    eggIds.erase(std::remove(eggIds.begin(), eggIds.end(), egg.id), eggIds.end());
+}
+
 void CommandParser::dispatch(const std::string &line)
 {
     if (line.empty())
@@ -452,9 +466,15 @@ void CommandParser::handleEbo(std::istringstream &args)
 
     Egg *egg = eggId >= 0 ? _state.findEgg(eggId) : nullptr;
     if (egg)
+    {
         egg->hatched = true;
+        egg->hatchedElapsedSeconds = 0.f;
+        removeEggIdFromOwningTeam(*egg);
+    }
 
-    std::cout << "[parser] oeuf #" << id << " a eclos" << std::endl;
+    // id contient deja le "#" (ex: "#10") : le concatener a un second "#"
+    // affichait "##10" au lieu de "#10".
+    std::cout << "[parser] oeuf " << id << " a eclos" << std::endl;
 }
 
 void CommandParser::handleEdi(std::istringstream &args)
@@ -462,8 +482,13 @@ void CommandParser::handleEdi(std::istringstream &args)
     std::string id;
     args >> id;
     int eggId = parseId(id);
-    if (eggId >= 0)
-        _state.eggs.erase(eggId);
+    if (eggId < 0)
+        return;
+
+    Egg *egg = _state.findEgg(eggId);
+    if (egg)
+        removeEggIdFromOwningTeam(*egg);
+    _state.eggs.erase(eggId);
 }
 
 void CommandParser::handleSgt(std::istringstream &args)

@@ -381,6 +381,82 @@ Test(command_parser, edi_removes_egg)
     cr_assert_null(state.findEgg(10));
 }
 
+Test(command_parser, ebo_removes_egg_id_from_owning_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 0 0 1 1 rouge");
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("ebo #10");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+Test(command_parser, edi_removes_egg_id_from_owning_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 0 0 1 1 rouge");
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("edi #10");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+// Un oeuf initial (present au lancement de la partie, avant qu'aucun
+// joueur n'ait pondu) n'a pas de parent connu : le protocole peut envoyer
+// un id de parent invalide/negatif pour ce cas. La GUI doit quand meme
+// creer et retrouver l'oeuf, sans planter ni tenter de le lier a une
+// equipe.
+Test(command_parser, enw_with_unknown_parent_still_creates_egg)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("enw #10 #-1 2 2");
+
+    Egg *egg = state.findEgg(10);
+    cr_assert_not_null(egg);
+    cr_assert_eq(egg->playerId, -1);
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+Test(command_parser, hatched_egg_survives_until_hold_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("ebo #10");
+
+    state.advanceEggAnimations(GameState::kEggHatchHoldSeconds / 2.f);
+    cr_assert_not_null(state.findEgg(10));
+
+    state.advanceEggAnimations(GameState::kEggHatchHoldSeconds);
+    cr_assert_null(state.findEgg(10));
+}
+
+Test(command_parser, unhatched_egg_is_not_pruned_by_animation_advance)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("enw #10 #1 2 2");
+
+    state.advanceEggAnimations(10.f);
+
+    cr_assert_not_null(state.findEgg(10));
+}
+
 // ---------------------------------------------------------------------------
 // sgt / sst / seg: server/game state
 // ---------------------------------------------------------------------------

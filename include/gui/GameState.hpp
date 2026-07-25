@@ -58,10 +58,12 @@ struct Incantation {
 
 struct Egg {
     int id = -1;
-    int playerId = -1;
+    int playerId = -1; // -1 pour un oeuf initial sans parent connu (cf enw)
     int x = -1;
     int y = -1;
     bool hatched = false;
+    float ageSeconds = 0.f;            // depuis enw, pour l'animation de ponte/apparition
+    float hatchedElapsedSeconds = 0.f; // depuis ebo, avant nettoyage (voir advanceEggAnimations)
 };
 
 struct GameState {
@@ -132,6 +134,27 @@ struct GameState {
                 it->resultElapsedSeconds += dt;
                 if (it->resultElapsedSeconds >= kIncantationResultHoldSeconds) {
                     it = incantations.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+    }
+
+    // Duree (s) pendant laquelle un oeuf eclos reste affiche (animation de
+    // sortie) avant d'etre retire de l'etat.
+    static constexpr float kEggHatchHoldSeconds = 0.5f;
+
+    // Fait vieillir chaque oeuf (anime son apparition) et purge ceux dont
+    // l'animation d'eclosion est terminee. A appeler une fois par frame.
+    void advanceEggAnimations(float dt)
+    {
+        for (auto it = eggs.begin(); it != eggs.end(); ) {
+            it->second.ageSeconds += dt;
+            if (it->second.hatched) {
+                it->second.hatchedElapsedSeconds += dt;
+                if (it->second.hatchedElapsedSeconds >= kEggHatchHoldSeconds) {
+                    it = eggs.erase(it);
                     continue;
                 }
             }

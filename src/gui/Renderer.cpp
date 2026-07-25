@@ -401,21 +401,44 @@ void Renderer::drawIncantations(const GameState &state)
 
 void Renderer::drawEggs(const GameState &state)
 {
+    // Duree de l'animation de ponte/apparition (grossit depuis 0). Le
+    // "pop" d'eclosion, lui, dure GameState::kEggHatchHoldSeconds (partage
+    // avec la purge de l'etat, pour disparaitre juste apres l'animation).
+    constexpr float kSpawnAnimSeconds = 0.35f;
+
     for (const auto &pair : state.eggs) {
         const Egg &egg = pair.second;
-        if (egg.hatched)
-            continue;
 
         render_theme::PixelPos center = render_theme::tileCenterPx(egg.x, egg.y);
         float bob = std::sin(_animPhase * 3.f) * render_theme::kCellSize * 0.05f;
         float boxSize = render_theme::kCellSize * 0.62f;
+        float alphaRatio = 1.f;
+
+        if (egg.hatched) {
+            // Eclosion : un petit "pop" (grossit legerement) puis
+            // disparait en fondu, avant d'etre retire de l'etat.
+            float hatchT = std::min(egg.hatchedElapsedSeconds / GameState::kEggHatchHoldSeconds, 1.f);
+            boxSize *= 1.f + 0.4f * hatchT;
+            alphaRatio = 1.f - hatchT;
+        } else {
+            // Ponte : grossit depuis 0 a l'apparition plutot que de
+            // surgir d'un coup a pleine taille.
+            float spawnT = std::min(egg.ageSeconds / kSpawnAnimSeconds, 1.f);
+            boxSize *= spawnT;
+        }
+
+        if (boxSize <= 0.f || alphaRatio <= 0.f)
+            continue;
+
         float scale = boxSize / 40.f;
         sf::Vector2f bodyPos(center.x, center.y + bob);
+        unsigned char alpha = static_cast<unsigned char>(255.f * alphaRatio);
 
-        drawGlow(_window, bodyPos, boxSize * 0.85f, sf::Color(255, 92, 179), 130);
+        drawGlow(_window, bodyPos, boxSize * 0.85f, sf::Color(255, 92, 179),
+            static_cast<unsigned char>(130.f * alphaRatio));
 
         sf::ConvexShape ghost = makeGhostShape(boxSize);
-        ghost.setFillColor(sf::Color(255, 92, 179));
+        ghost.setFillColor(sf::Color(255, 92, 179, alpha));
         ghost.setPosition(bodyPos);
         _window.draw(ghost);
 
@@ -423,13 +446,13 @@ void Renderer::drawEggs(const GameState &state)
             sf::Vector2f eyePos(bodyPos.x + side * 6.f * scale, bodyPos.y - 1.f * scale);
 
             sf::CircleShape eye(4.2f * scale);
-            eye.setFillColor(sf::Color::White);
+            eye.setFillColor(sf::Color(255, 255, 255, alpha));
             eye.setOrigin(eye.getRadius(), eye.getRadius());
             eye.setPosition(eyePos);
             _window.draw(eye);
 
             sf::CircleShape pupil(2.f * scale);
-            pupil.setFillColor(sf::Color(26, 26, 46));
+            pupil.setFillColor(sf::Color(26, 26, 46, alpha));
             pupil.setOrigin(pupil.getRadius(), pupil.getRadius());
             pupil.setPosition(eyePos.x + side * 1.3f * scale, eyePos.y);
             _window.draw(pupil);
@@ -580,6 +603,7 @@ void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
+    state.advanceEggAnimations(dt);
     updatePlayerAnimations(state, dt);
     ensureWindowSize(state.mapWidth, state.mapHeight);
 
