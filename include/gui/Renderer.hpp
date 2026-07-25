@@ -2,6 +2,7 @@
     #define GUI_RENDERER_HPP_
 
 #include <SFML/Graphics.hpp>
+#include <string>
 
 #include "GameState.hpp"
 
@@ -30,7 +31,22 @@ class Renderer
         sf::Font _font;
         bool _hasFont;
 
+        // Selection au clic gauche (case ou joueur), pour le panneau
+        // "inventaire du joueur selectionne" / "contenu de la case
+        // selectionnee" du HUD. pollEvents() n'a pas acces au GameState,
+        // donc le clic est bufferise puis traite au debut de draw().
+        bool _hasPendingClick;
+        sf::Vector2i _pendingClickPx;
+        int _selectedPlayerId;
+        bool _hasSelectedTile;
+        int _selectedTileX;
+        int _selectedTileY;
+
         void ensureWindowSize(int mapWidth, int mapHeight);
+        void processPendingClick(const GameState &state);
+        void drawText(const std::string &text, sf::Vector2f pos, unsigned int charSize,
+            sf::Color color, bool bold = false);
+        void drawHud(const GameState &state);
         // Rapproche Player::animX/animY de (x, y) d'une fraction de la
         // distance restante a chaque frame (lissage exponentiel), en
         // choisissant le chemin le plus court sur la carte toroidale.

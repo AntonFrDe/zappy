@@ -262,15 +262,43 @@ bool loadAnySystemFont(sf::Font &font)
 
 }
 
+namespace {
+
+// Largeur (px) du panneau HUD ajoute a droite de la carte, et hauteur
+// minimale de fenetre pour qu'il reste lisible sur une petite carte.
+// Limite connue : avec beaucoup d'equipes/joueurs sur une petite carte, le
+// contenu du panneau peut quand meme deborder en bas de fenetre (pas de
+// scroll ni de redimensionnement dynamique pour l'instant).
+constexpr float kHudWidth = 260.f;
+constexpr float kHudMinHeight = 500.f;
+
+// Taille totale de fenetre = carte + panneau HUD.
+sf::Vector2u computeWindowSize(int mapWidth, int mapHeight)
+{
+    float mapPxWidth = static_cast<float>(std::max(mapWidth, 1)) * render_theme::kCellSize;
+    float mapPxHeight = static_cast<float>(std::max(mapHeight, 1)) * render_theme::kCellSize;
+
+    return sf::Vector2u(
+        static_cast<unsigned int>(mapPxWidth + kHudWidth),
+        static_cast<unsigned int>(std::max(mapPxHeight, kHudMinHeight)));
+}
+
+}
+
 Renderer::Renderer(int initialMapWidth, int initialMapHeight)
-    : _window(sf::VideoMode(
-          static_cast<unsigned int>(std::max(initialMapWidth, 1) * render_theme::kCellSize),
-          static_cast<unsigned int>(std::max(initialMapHeight, 1) * render_theme::kCellSize)),
+    : _window(sf::VideoMode(computeWindowSize(initialMapWidth, initialMapHeight).x,
+          computeWindowSize(initialMapWidth, initialMapHeight).y),
           "Zappy GUI", sf::Style::Default, makeAntialiasedSettings()),
       _lastWidth(initialMapWidth),
       _lastHeight(initialMapHeight),
       _animPhase(0.f),
-      _hasFont(loadAnySystemFont(_font))
+      _hasFont(loadAnySystemFont(_font)),
+      _hasPendingClick(false),
+      _pendingClickPx(0, 0),
+      _selectedPlayerId(-1),
+      _hasSelectedTile(false),
+      _selectedTileX(-1),
+      _selectedTileY(-1)
 {
     _window.setVerticalSyncEnabled(true);
 }
@@ -287,6 +315,10 @@ void Renderer::pollEvents()
     while (_window.pollEvent(event)) {
         if (event.type == sf::Event::Closed)
             _window.close();
+        if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            _hasPendingClick = true;
+            _pendingClickPx = sf::Vector2i(event.mouseButton.x, event.mouseButton.y);
+        }
     }
 }
 
@@ -297,9 +329,7 @@ void Renderer::ensureWindowSize(int mapWidth, int mapHeight)
     if (mapWidth == _lastWidth && mapHeight == _lastHeight)
         return;
 
-    _window.setSize(sf::Vector2u(
-        static_cast<unsigned int>(mapWidth * render_theme::kCellSize),
-        static_cast<unsigned int>(mapHeight * render_theme::kCellSize)));
+    _window.setSize(computeWindowSize(mapWidth, mapHeight));
     _lastWidth = mapWidth;
     _lastHeight = mapHeight;
 }
@@ -599,12 +629,215 @@ void Renderer::drawGameOverBanner(const GameState &state)
     _window.draw(teamText);
 }
 
+void Renderer::processPendingClick(const GameState &state)
+{
+    if (!_hasPendingClick)
+        return;
+    _hasPendingClick = false;
+
+    float mapPxWidth = static_cast<float>(state.mapWidth) * render_theme::kCellSize;
+    float clickX = static_cast<float>(_pendingClickPx.x);
+    float clickY = static_cast<float>(_pendingClickPx.y);
+
+    // Clic hors de la zone carte (dans le panneau HUD, ou hors fenetre) :
+    // rien a selectionner.
+    if (clickX < 0.f || clickX >= mapPxWidth || clickY < 0.f)
+        return;
+
+    // Joueur le plus proche du clic, dans un rayon raisonnable (permet de
+    // cliquer un joueur meme sans viser exactement son centre).
+    float pickRadius = render_theme::kCellSize * 0.5f;
+    float bestDistSq = pickRadius * pickRadius;
+    int bestId = -1;
+
+    for (const auto &pair : state.players) {
+        const Player &player = pair.second;
+        if (!player.alive)
+            continue;
+        render_theme::PixelPos center = render_theme::tileCenterPxF(player.animX, player.animY);
+        float dx = center.x - clickX;
+        float dy = center.y - clickY;
+        float distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) {
+            bestDistSq = distSq;
+            bestId = player.id;
+        }
+    }
+
+    if (bestId >= 0) {
+        _selectedPlayerId = bestId;
+        _hasSelectedTile = false;
+        return;
+    }
+
+    int tileX = static_cast<int>(clickX / render_theme::kCellSize);
+    int tileY = static_cast<int>(clickY / render_theme::kCellSize);
+    if (tileX >= 0 && tileX < state.mapWidth && tileY >= 0 && tileY < state.mapHeight) {
+        _selectedTileX = tileX;
+        _selectedTileY = tileY;
+        _hasSelectedTile = true;
+        _selectedPlayerId = -1;
+    }
+}
+
+void Renderer::drawText(const std::string &text, sf::Vector2f pos, unsigned int charSize,
+    sf::Color color, bool bold)
+{
+    if (!_hasFont)
+        return;
+
+    sf::Text sfText(text, _font, charSize);
+    if (bold)
+        sfText.setStyle(sf::Text::Bold);
+    sfText.setFillColor(color);
+    sfText.setPosition(pos);
+    _window.draw(sfText);
+}
+
+void Renderer::drawHud(const GameState &state)
+{
+    static const char *kResourceNames[RESOURCE_COUNT] = {
+        "food", "linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"
+    };
+
+    sf::Vector2u winSize = _window.getSize();
+    float mapPxWidth = static_cast<float>(state.mapWidth) * render_theme::kCellSize;
+    float panelWidth = static_cast<float>(winSize.x) - mapPxWidth;
+
+    sf::RectangleShape panel(sf::Vector2f(panelWidth, static_cast<float>(winSize.y)));
+    panel.setPosition(mapPxWidth, 0.f);
+    panel.setFillColor(sf::Color(18, 18, 30, 255));
+    _window.draw(panel);
+
+    if (!_hasFont)
+        return;
+
+    const float padding = 12.f;
+    float x = mapPxWidth + padding;
+    float y = padding;
+
+    drawText("EQUIPES", sf::Vector2f(x, y), 14, sf::Color(180, 180, 200), true);
+    y += 20.f;
+
+    for (const auto &teamPair : state.teams) {
+        const Team &team = teamPair.second;
+        render_theme::RgbColor teamRgb = render_theme::teamColor(team.name);
+
+        std::size_t aliveCount = 0;
+        for (int pid : team.playerIds) {
+            const Player *player = state.findPlayer(pid);
+            if (player && player->alive)
+                ++aliveCount;
+        }
+
+        sf::RectangleShape swatch(sf::Vector2f(10.f, 10.f));
+        swatch.setFillColor(toSfColor(teamRgb));
+        swatch.setPosition(x, y + 3.f);
+        _window.draw(swatch);
+
+        drawText(team.name + "  " + std::to_string(aliveCount) + "/"
+            + std::to_string(team.playerIds.size()) + " vivant(s)",
+            sf::Vector2f(x + 16.f, y), 13, sf::Color::White);
+        y += 18.f;
+
+        // Liste id/niveau des joueurs vivants, plafonnee pour ne pas
+        // deborder du panneau sur une grosse partie.
+        constexpr std::size_t kMaxListedPlayers = 6;
+        std::size_t listed = 0;
+        for (int pid : team.playerIds) {
+            const Player *player = state.findPlayer(pid);
+            if (!player || !player->alive)
+                continue;
+            if (listed >= kMaxListedPlayers) {
+                drawText("  ...", sf::Vector2f(x + 16.f, y), 12, sf::Color(150, 150, 160));
+                y += 15.f;
+                break;
+            }
+            drawText("  #" + std::to_string(player->id) + "  Lv" + std::to_string(player->level),
+                sf::Vector2f(x + 16.f, y), 12, sf::Color(190, 190, 200));
+            y += 15.f;
+            ++listed;
+        }
+        y += 8.f;
+    }
+
+    y += 6.f;
+    drawText("Frequence: " + std::to_string(state.timeUnit), sf::Vector2f(x, y), 13, sf::Color(200, 200, 210));
+    y += 24.f;
+
+    drawText("RESSOURCES", sf::Vector2f(x, y), 14, sf::Color(180, 180, 200), true);
+    y += 20.f;
+    for (int r = 0; r < RESOURCE_COUNT; ++r) {
+        sf::CircleShape dot(5.f);
+        dot.setFillColor(toSfColor(render_theme::resourceColor(r)));
+        dot.setOrigin(dot.getRadius(), dot.getRadius());
+        dot.setPosition(x + 5.f, y + 6.f);
+        _window.draw(dot);
+        drawText(kResourceNames[r], sf::Vector2f(x + 16.f, y), 12, sf::Color(190, 190, 200));
+        y += 16.f;
+    }
+    y += 10.f;
+
+    const Player *selectedPlayer = _selectedPlayerId >= 0 ? state.findPlayer(_selectedPlayerId) : nullptr;
+
+    if (selectedPlayer && selectedPlayer->alive) {
+        drawText("JOUEUR #" + std::to_string(selectedPlayer->id), sf::Vector2f(x, y), 14,
+            sf::Color(255, 216, 10), true);
+        y += 20.f;
+        drawText("Equipe: " + selectedPlayer->team, sf::Vector2f(x, y), 12, sf::Color(200, 200, 210));
+        y += 16.f;
+        drawText("Niveau: " + std::to_string(selectedPlayer->level), sf::Vector2f(x, y), 12,
+            sf::Color(200, 200, 210));
+        y += 18.f;
+        drawText("Inventaire:", sf::Vector2f(x, y), 12, sf::Color(180, 180, 200));
+        y += 16.f;
+        for (int r = 0; r < RESOURCE_COUNT; ++r) {
+            sf::CircleShape dot(4.f);
+            dot.setFillColor(toSfColor(render_theme::resourceColor(r)));
+            dot.setOrigin(dot.getRadius(), dot.getRadius());
+            dot.setPosition(x + 9.f, y + 6.f);
+            _window.draw(dot);
+            drawText(std::string(kResourceNames[r]) + ": " + std::to_string(selectedPlayer->inventory[r]),
+                sf::Vector2f(x + 18.f, y), 12, sf::Color(190, 190, 200));
+            y += 15.f;
+        }
+    } else if (_hasSelectedTile && _selectedTileX < state.mapWidth && _selectedTileY < state.mapHeight) {
+        drawText("CASE (" + std::to_string(_selectedTileX) + "," + std::to_string(_selectedTileY) + ")",
+            sf::Vector2f(x, y), 14, sf::Color(255, 216, 10), true);
+        y += 20.f;
+        const Tile &tile = state.tileAt(_selectedTileX, _selectedTileY);
+        bool anyResource = false;
+        for (int r = 0; r < RESOURCE_COUNT; ++r) {
+            if (tile.resources[r] <= 0)
+                continue;
+            anyResource = true;
+            sf::CircleShape dot(4.f);
+            dot.setFillColor(toSfColor(render_theme::resourceColor(r)));
+            dot.setOrigin(dot.getRadius(), dot.getRadius());
+            dot.setPosition(x + 9.f, y + 6.f);
+            _window.draw(dot);
+            drawText(std::string(kResourceNames[r]) + ": " + std::to_string(tile.resources[r]),
+                sf::Vector2f(x + 18.f, y), 12, sf::Color(190, 190, 200));
+            y += 15.f;
+        }
+        if (!anyResource)
+            drawText("(vide)", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+    } else {
+        drawText("Clique sur un joueur", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+        y += 15.f;
+        drawText("ou une case pour plus", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+        y += 15.f;
+        drawText("de details.", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+    }
+}
+
 void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
     state.advanceEggAnimations(dt);
     updatePlayerAnimations(state, dt);
+    processPendingClick(state);
     ensureWindowSize(state.mapWidth, state.mapHeight);
 
     _window.clear(sf::Color::Black);
@@ -613,6 +846,7 @@ void Renderer::draw(GameState &state, float dt)
     drawIncantations(state);
     drawEggs(state);
     drawPlayers(state);
+    drawHud(state);
     drawGameOverBanner(state);
     _window.display();
 }
