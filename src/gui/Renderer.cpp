@@ -343,12 +343,13 @@ void Renderer::drawTiles(const GameState &state)
                 sf::Vector2f slotPos(center.x + slotOffset.x, center.y + slotOffset.y);
 
                 sf::Color resourceColor = toSfColor(render_theme::resourceColor(r));
+                float quantityScale = render_theme::resourceQuantityScale(tile.resources[r]);
 
                 if (render_theme::isRareResource(r)) {
                     // pulsation resserree (0.85-1.15) pour ne jamais devenir
                     // trop petite/pale a l'ecran.
                     float pulse = 1.f + 0.15f * std::sin(_animPhase * 4.f);
-                    sf::CircleShape power(render_theme::kCellSize * 0.13f * pulse);
+                    sf::CircleShape power(render_theme::kCellSize * 0.13f * pulse * quantityScale);
                     power.setFillColor(resourceColor);
                     power.setOutlineThickness(1.2f);
                     power.setOutlineColor(sf::Color(255, 255, 255, 180));
@@ -356,7 +357,7 @@ void Renderer::drawTiles(const GameState &state)
                     power.setPosition(slotPos);
                     _window.draw(power);
                 } else {
-                    sf::CircleShape pellet(render_theme::kCellSize * 0.05f);
+                    sf::CircleShape pellet(render_theme::kCellSize * 0.05f * quantityScale);
                     pellet.setFillColor(resourceColor);
                     pellet.setOrigin(pellet.getRadius(), pellet.getRadius());
                     pellet.setPosition(slotPos);

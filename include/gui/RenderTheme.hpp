@@ -38,6 +38,13 @@ bool isRareResource(int resourceIndex);
 // coup d'oeil sur une tuile au lieu de se fondre en 2 couleurs.
 RgbColor resourceColor(int resourceIndex);
 
+// Multiplicateur de taille pour une pastille de ressource selon la
+// quantite presente sur la case (1 ressource => 1.0, taille normale) :
+// une case avec beaucoup d'une meme ressource se voit donc au premier
+// coup d'oeil, sans avoir besoin d'un compteur numerique. Clampe pour
+// qu'une quantite enorme ne fasse pas deborder la tuile.
+float resourceQuantityScale(int quantity);
+
 // Angle (degres, sens horaire, 0 = fait face a droite) correspondant a une
 // valeur brute d'Orientation (North=1, East=2, South=3, West=4).
 float orientationAngleDeg(int orientation);

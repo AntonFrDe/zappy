@@ -65,6 +65,33 @@ Test(render_theme, each_resource_has_a_distinct_color)
 }
 
 // ---------------------------------------------------------------------------
+// resourceQuantityScale: agrandit la pastille selon la quantite
+// ---------------------------------------------------------------------------
+
+Test(render_theme, resource_quantity_scale_is_normal_for_a_single_unit)
+{
+    cr_assert_float_eq(render_theme::resourceQuantityScale(0), 1.f, 0.001);
+    cr_assert_float_eq(render_theme::resourceQuantityScale(1), 1.f, 0.001);
+}
+
+Test(render_theme, resource_quantity_scale_grows_with_quantity)
+{
+    float two = render_theme::resourceQuantityScale(2);
+    float five = render_theme::resourceQuantityScale(5);
+
+    cr_assert_gt(two, 1.f);
+    cr_assert_gt(five, two);
+}
+
+Test(render_theme, resource_quantity_scale_is_capped_for_huge_quantities)
+{
+    float capped = render_theme::resourceQuantityScale(6);
+    float huge = render_theme::resourceQuantityScale(1000);
+
+    cr_assert_float_eq(huge, capped, 0.001);
+}
+
+// ---------------------------------------------------------------------------
 // orientationAngleDeg: protocole reseau North=1, East=2, South=3, West=4
 // ---------------------------------------------------------------------------
 

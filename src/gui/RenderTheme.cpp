@@ -1,5 +1,6 @@
 #include "RenderTheme.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -54,6 +55,18 @@ RgbColor resourceColor(int resourceIndex)
     if (resourceIndex < 0 || resourceIndex >= 7)
         return RgbColor{255, 255, 255};
     return kResourcePalette[resourceIndex];
+}
+
+float resourceQuantityScale(int quantity)
+{
+    constexpr int kQuantityCap = 6;
+    constexpr float kScalePerExtraUnit = 0.18f;
+
+    if (quantity <= 1)
+        return 1.f;
+
+    int extra = std::min(quantity, kQuantityCap) - 1;
+    return 1.f + kScalePerExtraUnit * static_cast<float>(extra);
 }
 
 float orientationAngleDeg(int orientation)
