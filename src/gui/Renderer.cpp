@@ -490,6 +490,92 @@ void Renderer::drawEggs(const GameState &state)
     }
 }
 
+void Renderer::drawEffects(const GameState &state)
+{
+    for (const TransientEffect &effect : state.effects) {
+        float t = std::min(effect.elapsedSeconds / effect.durationSeconds, 1.f);
+        render_theme::PixelPos center = render_theme::tileCenterPx(effect.x, effect.y);
+        unsigned char alpha = static_cast<unsigned char>(255.f * (1.f - t));
+
+        switch (effect.kind) {
+        case EffectKind::ResourcePickup:
+        case EffectKind::ResourceDrop: {
+            // Remonte vers le joueur pour un ramassage, descend vers le
+            // sol pour un depot.
+            render_theme::RgbColor color = render_theme::resourceColor(effect.resourceIndex);
+            float direction = effect.kind == EffectKind::ResourcePickup ? -1.f : 1.f;
+            float offset = direction * t * render_theme::kCellSize * 0.5f;
+
+            sf::CircleShape dot(4.f * (1.f - 0.3f * t));
+            dot.setFillColor(sf::Color(color.r, color.g, color.b, alpha));
+            dot.setOrigin(dot.getRadius(), dot.getRadius());
+            dot.setPosition(center.x, center.y + offset);
+            _window.draw(dot);
+            break;
+        }
+        case EffectKind::Expulsion: {
+            sf::CircleShape ring(render_theme::kCellSize * (0.3f + 0.8f * t));
+            ring.setFillColor(sf::Color::Transparent);
+            ring.setOutlineThickness(3.f);
+            ring.setOutlineColor(sf::Color(255, 140, 40, alpha));
+            ring.setOrigin(ring.getRadius(), ring.getRadius());
+            ring.setPosition(toSfVec(center));
+            _window.draw(ring);
+            break;
+        }
+        case EffectKind::Broadcast: {
+            // Deux anneaux "onde sonore" decales dans le temps.
+            for (int i = 0; i < 2; ++i) {
+                float ringT = std::min(t + static_cast<float>(i) * 0.25f, 1.f);
+                unsigned char ringAlpha = static_cast<unsigned char>(180.f * (1.f - ringT));
+
+                sf::CircleShape ring(render_theme::kCellSize * (0.4f + 1.4f * ringT));
+                ring.setFillColor(sf::Color::Transparent);
+                ring.setOutlineThickness(2.f);
+                ring.setOutlineColor(sf::Color(120, 220, 255, ringAlpha));
+                ring.setOrigin(ring.getRadius(), ring.getRadius());
+                ring.setPosition(toSfVec(center));
+                _window.draw(ring);
+            }
+            break;
+        }
+        case EffectKind::EggLaying: {
+            sf::CircleShape pulse(render_theme::kCellSize * (0.15f + 0.25f * t));
+            pulse.setFillColor(sf::Color(255, 92, 179, alpha));
+            pulse.setOrigin(pulse.getRadius(), pulse.getRadius());
+            pulse.setPosition(center.x, center.y + render_theme::kCellSize * 0.2f);
+            _window.draw(pulse);
+            break;
+        }
+        case EffectKind::Death: {
+            sf::CircleShape fade(render_theme::kCellSize * 0.32f * (1.f - 0.6f * t));
+            fade.setFillColor(sf::Color(120, 20, 20, alpha));
+            fade.setOutlineThickness(2.f);
+            fade.setOutlineColor(sf::Color(200, 40, 40, alpha));
+            fade.setOrigin(fade.getRadius(), fade.getRadius());
+            fade.setPosition(toSfVec(center));
+            _window.draw(fade);
+            break;
+        }
+        case EffectKind::LevelUp: {
+            sf::CircleShape burst(render_theme::kCellSize * (0.25f + 0.5f * t));
+            burst.setFillColor(sf::Color::Transparent);
+            burst.setOutlineThickness(2.5f);
+            burst.setOutlineColor(sf::Color(120, 255, 140, alpha));
+            burst.setOrigin(burst.getRadius(), burst.getRadius());
+            burst.setPosition(toSfVec(center));
+            _window.draw(burst);
+
+            if (effect.level > 0) {
+                sf::Vector2f pipsPos(center.x, center.y - render_theme::kCellSize * 0.55f - t * 10.f);
+                drawLevelPips(_window, pipsPos, effect.level, alpha);
+            }
+            break;
+        }
+        }
+    }
+}
+
 void Renderer::drawPlayers(const GameState &state)
 {
     float mouthHalf = render_theme::mouthHalfAngleDeg(_animPhase);
@@ -836,6 +922,7 @@ void Renderer::draw(GameState &state, float dt)
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
     state.advanceEggAnimations(dt);
+    state.advanceEffects(dt);
     updatePlayerAnimations(state, dt);
     processPendingClick(state);
     ensureWindowSize(state.mapWidth, state.mapHeight);
@@ -846,6 +933,7 @@ void Renderer::draw(GameState &state, float dt)
     drawIncantations(state);
     drawEggs(state);
     drawPlayers(state);
+    drawEffects(state);
     drawHud(state);
     drawGameOverBanner(state);
     _window.display();

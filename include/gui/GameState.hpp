@@ -66,6 +66,30 @@ struct Egg {
     float hatchedElapsedSeconds = 0.f; // depuis ebo, avant nettoyage (voir advanceEggAnimations)
 };
 
+// Evenement ponctuel (pgt/pdr/pex/pbc/pfk/pdi/plv) : ces commandes ne
+// changent qu'un etat instantane (inventaire, vie, niveau...) sans laisser
+// de trace visuelle. TransientEffect leur donne une existence breve dans
+// l'etat, le temps que Renderer les anime, avant d'etre purgees.
+enum class EffectKind {
+    ResourcePickup, // pgt
+    ResourceDrop,   // pdr
+    Expulsion,      // pex
+    Broadcast,      // pbc
+    EggLaying,      // pfk
+    Death,          // pdi
+    LevelUp,        // plv
+};
+
+struct TransientEffect {
+    EffectKind kind;
+    int x = -1;
+    int y = -1;
+    int resourceIndex = -1; // pertinent pour ResourcePickup/ResourceDrop
+    int level = -1;         // pertinent pour LevelUp
+    float elapsedSeconds = 0.f;
+    float durationSeconds = 0.6f;
+};
+
 struct GameState {
     int mapWidth = 0;
     int mapHeight = 0;
@@ -77,6 +101,7 @@ struct GameState {
     std::unordered_map<std::string, Team> teams;
     std::vector<Incantation> incantations;
     std::unordered_map<int, Egg> eggs;
+    std::vector<TransientEffect> effects;
 
     void resizeMap(int width, int height)
     {
@@ -159,6 +184,25 @@ struct GameState {
                 }
             }
             ++it;
+        }
+    }
+
+    void addEffect(EffectKind kind, int x, int y, int resourceIndex = -1, int level = -1,
+        float durationSeconds = 0.6f)
+    {
+        effects.push_back(TransientEffect{kind, x, y, resourceIndex, level, 0.f, durationSeconds});
+    }
+
+    // Purge les effets ponctuels dont la duree d'affichage est ecoulee. A
+    // appeler une fois par frame avec le dt ecoule.
+    void advanceEffects(float dt)
+    {
+        for (auto it = effects.begin(); it != effects.end(); ) {
+            it->elapsedSeconds += dt;
+            if (it->elapsedSeconds >= it->durationSeconds)
+                it = effects.erase(it);
+            else
+                ++it;
         }
     }
 

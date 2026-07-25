@@ -56,6 +56,9 @@ class Renderer
         void drawIncantations(const GameState &state);
         void drawEggs(const GameState &state);
         void drawPlayers(const GameState &state);
+        // Anime les evenements ponctuels sans effet visuel propre dans le
+        // protocole (pgt/pdr/pex/pbc/pfk/pdi/plv), voir GameState::effects.
+        void drawEffects(const GameState &state);
         // N'affiche du texte que si une police a pu etre chargee (voir
         // constructeur) : le projet n'en embarque pas, donc plusieurs
         // chemins systeme usuels sont tentes, sans jamais planter si aucun
