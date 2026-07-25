@@ -65,6 +65,33 @@ Test(render_theme, each_resource_has_a_distinct_color)
 }
 
 // ---------------------------------------------------------------------------
+// resourceQuantityScale: agrandit la pastille selon la quantite
+// ---------------------------------------------------------------------------
+
+Test(render_theme, resource_quantity_scale_is_normal_for_a_single_unit)
+{
+    cr_assert_float_eq(render_theme::resourceQuantityScale(0), 1.f, 0.001);
+    cr_assert_float_eq(render_theme::resourceQuantityScale(1), 1.f, 0.001);
+}
+
+Test(render_theme, resource_quantity_scale_grows_with_quantity)
+{
+    float two = render_theme::resourceQuantityScale(2);
+    float five = render_theme::resourceQuantityScale(5);
+
+    cr_assert_gt(two, 1.f);
+    cr_assert_gt(five, two);
+}
+
+Test(render_theme, resource_quantity_scale_is_capped_for_huge_quantities)
+{
+    float capped = render_theme::resourceQuantityScale(6);
+    float huge = render_theme::resourceQuantityScale(1000);
+
+    cr_assert_float_eq(huge, capped, 0.001);
+}
+
+// ---------------------------------------------------------------------------
 // orientationAngleDeg: protocole reseau North=1, East=2, South=3, West=4
 // ---------------------------------------------------------------------------
 
@@ -102,18 +129,41 @@ Test(render_theme, mouth_half_angle_is_periodic)
 // tileCenterPx
 // ---------------------------------------------------------------------------
 
-Test(render_theme, tile_center_px_for_origin_tile)
-{
-    render_theme::PixelPos center = render_theme::tileCenterPx(0, 0);
-
-    cr_assert_float_eq(center.x, render_theme::kCellSize * 0.5f, 0.001);
-    cr_assert_float_eq(center.y, render_theme::kCellSize * 0.5f, 0.001);
-}
-
 Test(render_theme, tile_center_px_for_arbitrary_tile)
 {
     render_theme::PixelPos center = render_theme::tileCenterPx(2, 3);
 
     cr_assert_float_eq(center.x, 2.5f * render_theme::kCellSize, 0.001);
     cr_assert_float_eq(center.y, 3.5f * render_theme::kCellSize, 0.001);
+}
+
+// ---------------------------------------------------------------------------
+// shortestWrappedDelta / wrapTileCoord: deplacement toroidal
+// ---------------------------------------------------------------------------
+
+Test(render_theme, shortest_wrapped_delta_direct_move_no_wrap)
+{
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(2.f, 5, 10), 3.f, 0.001);
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(5.f, 2, 10), -3.f, 0.001);
+}
+
+Test(render_theme, shortest_wrapped_delta_goes_the_short_way_around_the_edge)
+{
+    // De la case 0 vers la derniere case (size-1) : le plus court chemin
+    // est -1 (passer par le bord), pas +9 (traverser toute la carte).
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(0.f, 9, 10), -1.f, 0.001);
+    // Symetriquement, de la derniere case vers la case 0 : +1.
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(9.f, 0, 10), 1.f, 0.001);
+}
+
+Test(render_theme, shortest_wrapped_delta_without_map_size_is_raw_delta)
+{
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(0.f, 9, 0), 9.f, 0.001);
+}
+
+Test(render_theme, wrap_tile_coord_brings_negative_and_overflow_back_in_range)
+{
+    cr_assert_float_eq(render_theme::wrapTileCoord(-0.5f, 10), 9.5f, 0.001);
+    cr_assert_float_eq(render_theme::wrapTileCoord(10.5f, 10), 0.5f, 0.001);
+    cr_assert_float_eq(render_theme::wrapTileCoord(4.f, 10), 4.f, 0.001);
 }

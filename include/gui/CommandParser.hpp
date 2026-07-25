@@ -54,4 +54,10 @@ class CommandParser
         static bool isValidOrientation(int o);
         static bool isValidLevel(int level);
         bool isInMapBounds(int x, int y) const;
+
+        // Retire l'id de cet oeuf de Team::eggIds (equipe du joueur qui l'a
+        // pondu), pour que la liste ne contienne plus que des oeufs non
+        // eclos/non detruits. A appeler avant qu'un oeuf n'eclose (ebo) ou
+        // ne disparaisse sans eclore (edi).
+        void removeEggIdFromOwningTeam(const Egg &egg);
 };

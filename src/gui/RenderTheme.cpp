@@ -1,5 +1,6 @@
 #include "RenderTheme.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -56,6 +57,18 @@ RgbColor resourceColor(int resourceIndex)
     return kResourcePalette[resourceIndex];
 }
 
+float resourceQuantityScale(int quantity)
+{
+    constexpr int kQuantityCap = 6;
+    constexpr float kScalePerExtraUnit = 0.18f;
+
+    if (quantity <= 1)
+        return 1.f;
+
+    int extra = std::min(quantity, kQuantityCap) - 1;
+    return 1.f + kScalePerExtraUnit * static_cast<float>(extra);
+}
+
 float orientationAngleDeg(int orientation)
 {
     switch (orientation) {
@@ -86,7 +99,40 @@ float mouthHalfAngleDeg(float phaseSeconds)
 
 PixelPos tileCenterPx(int tileX, int tileY)
 {
+    return tileCenterPxF(static_cast<float>(tileX), static_cast<float>(tileY));
+}
+
+PixelPos tileCenterPxF(float tileX, float tileY)
+{
     return PixelPos{(tileX + 0.5f) * kCellSize, (tileY + 0.5f) * kCellSize};
+}
+
+float shortestWrappedDelta(float from, int to, int size)
+{
+    float raw = static_cast<float>(to) - from;
+
+    if (size <= 0)
+        return raw;
+
+    float sizeF = static_cast<float>(size);
+    raw = std::fmod(raw, sizeF);
+    if (raw > sizeF / 2.f)
+        raw -= sizeF;
+    else if (raw < -sizeF / 2.f)
+        raw += sizeF;
+    return raw;
+}
+
+float wrapTileCoord(float value, int size)
+{
+    if (size <= 0)
+        return value;
+
+    float sizeF = static_cast<float>(size);
+    value = std::fmod(value, sizeF);
+    if (value < 0.f)
+        value += sizeF;
+    return value;
 }
 
 // Grille 3x3 interne a la tuile (le centre reste libre pour un joueur

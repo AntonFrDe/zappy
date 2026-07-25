@@ -82,6 +82,20 @@ bool CommandParser::isInMapBounds(int x, int y) const
     return x >= 0 && y >= 0 && x < _state.mapWidth && y < _state.mapHeight;
 }
 
+void CommandParser::removeEggIdFromOwningTeam(const Egg &egg)
+{
+    Player *parent = egg.playerId >= 0 ? _state.findPlayer(egg.playerId) : nullptr;
+    if (!parent)
+        return;
+
+    auto teamIt = _state.teams.find(parent->team);
+    if (teamIt == _state.teams.end())
+        return;
+
+    auto &eggIds = teamIt->second.eggIds;
+    eggIds.erase(std::remove(eggIds.begin(), eggIds.end(), egg.id), eggIds.end());
+}
+
 void CommandParser::dispatch(const std::string &line)
 {
     if (line.empty())
@@ -187,6 +201,10 @@ void CommandParser::handlePnw(std::istringstream &args)
     player.level = level;
     player.team = team;
     player.alive = true;
+    // Pas d'animation de deplacement a l'apparition : evite de le voir
+    // glisser depuis (0, 0) au moment ou il rejoint la partie.
+    player.animX = static_cast<float>(x);
+    player.animY = static_cast<float>(y);
 
     _state.players[id] = player;
 
@@ -237,6 +255,7 @@ void CommandParser::handlePlv(std::istringstream &args)
         return;
 
     player->level = level;
+    _state.addEffect(EffectKind::LevelUp, player->x, player->y, -1, level, 0.7f);
 }
 
 void CommandParser::handlePin(std::istringstream &args)
@@ -276,6 +295,10 @@ void CommandParser::handlePex(std::istringstream &args)
     std::string idToken;
     args >> idToken;
     int id = parseId(idToken);
+    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (player)
+        _state.addEffect(EffectKind::Expulsion, player->x, player->y);
+
     std::cout << "[parser] joueur #" << id << " expulse" << std::endl;
 }
 
@@ -289,6 +312,10 @@ void CommandParser::handlePbc(std::istringstream &args)
     std::getline(args, message);
     if (!message.empty() && message[0] == ' ')
         message.erase(0, 1);
+
+    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (player)
+        _state.addEffect(EffectKind::Broadcast, player->x, player->y, -1, -1, 1.f);
 
     std::cout << "[parser] broadcast de #" << id << ": " << message << std::endl;
 }
@@ -353,7 +380,12 @@ void CommandParser::handlePfk(std::istringstream &args)
 {
     std::string id;
     args >> id;
-    std::cout << "[parser] joueur #" << parseId(id) << " pond un oeuf" << std::endl;
+    int playerId = parseId(id);
+    Player *player = playerId >= 0 ? _state.findPlayer(playerId) : nullptr;
+    if (player)
+        _state.addEffect(EffectKind::EggLaying, player->x, player->y);
+
+    std::cout << "[parser] joueur #" << playerId << " pond un oeuf" << std::endl;
 }
 
 void CommandParser::handlePdr(std::istringstream &args)
@@ -372,6 +404,7 @@ void CommandParser::handlePdr(std::istringstream &args)
             player->inventory[resourceIndex]--;
         if (isInMapBounds(player->x, player->y))
             _state.tileAt(player->x, player->y).resources[resourceIndex]++;
+        _state.addEffect(EffectKind::ResourceDrop, player->x, player->y, resourceIndex);
     }
 }
 
@@ -394,6 +427,7 @@ void CommandParser::handlePgt(std::istringstream &args)
             if (tile.resources[resourceIndex] > 0)
                 tile.resources[resourceIndex]--;
         }
+        _state.addEffect(EffectKind::ResourcePickup, player->x, player->y, resourceIndex);
     }
 }
 
@@ -404,7 +438,10 @@ void CommandParser::handlePdi(std::istringstream &args)
     int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player)
+    {
+        _state.addEffect(EffectKind::Death, player->x, player->y, -1, -1, 0.8f);
         player->alive = false;
+    }
 
     std::cout << "[parser] mort du joueur #" << id << std::endl;
 }
@@ -448,9 +485,15 @@ void CommandParser::handleEbo(std::istringstream &args)
 
     Egg *egg = eggId >= 0 ? _state.findEgg(eggId) : nullptr;
     if (egg)
+    {
         egg->hatched = true;
+        egg->hatchedElapsedSeconds = 0.f;
+        removeEggIdFromOwningTeam(*egg);
+    }
 
-    std::cout << "[parser] oeuf #" << id << " a eclos" << std::endl;
+    // id contient deja le "#" (ex: "#10") : le concatener a un second "#"
+    // affichait "##10" au lieu de "#10".
+    std::cout << "[parser] oeuf " << id << " a eclos" << std::endl;
 }
 
 void CommandParser::handleEdi(std::istringstream &args)
@@ -458,8 +501,13 @@ void CommandParser::handleEdi(std::istringstream &args)
     std::string id;
     args >> id;
     int eggId = parseId(id);
-    if (eggId >= 0)
-        _state.eggs.erase(eggId);
+    if (eggId < 0)
+        return;
+
+    Egg *egg = _state.findEgg(eggId);
+    if (egg)
+        removeEggIdFromOwningTeam(*egg);
+    _state.eggs.erase(eggId);
 }
 
 void CommandParser::handleSgt(std::istringstream &args)

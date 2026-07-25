@@ -38,8 +38,15 @@ bool isRareResource(int resourceIndex);
 // coup d'oeil sur une tuile au lieu de se fondre en 2 couleurs.
 RgbColor resourceColor(int resourceIndex);
 
+// Multiplicateur de taille pour une pastille de ressource selon la
+// quantite presente sur la case (1 ressource => 1.0, taille normale) :
+// une case avec beaucoup d'une meme ressource se voit donc au premier
+// coup d'oeil, sans avoir besoin d'un compteur numerique. Clampe pour
+// qu'une quantite enorme ne fasse pas deborder la tuile.
+float resourceQuantityScale(int quantity);
+
 // Angle (degres, sens horaire, 0 = fait face a droite) correspondant a une
-// valeur brute d'Orientation (North=0, East=1, South=2, West=3).
+// valeur brute d'Orientation (North=1, East=2, South=3, West=4).
 float orientationAngleDeg(int orientation);
 
 // Demi-angle (en degres) de la bouche du Pac-Man a l'instant donne :
@@ -48,6 +55,23 @@ float mouthHalfAngleDeg(float phaseSeconds);
 
 // Centre en pixels d'une tuile (tileX, tileY) sur l'ecran.
 PixelPos tileCenterPx(int tileX, int tileY);
+
+// Variante flottante de tileCenterPx, pour une position en cours
+// d'interpolation (deplacement anime) plutot qu'une case entiere.
+PixelPos tileCenterPxF(float tileX, float tileY);
+
+// Delta signe le plus court entre une position flottante "from" et une
+// case cible "to" sur un axe torique de taille "size" (le monde Zappy
+// boucle sur les bords) : ex. shortestWrappedDelta(0.f, size-1, size)
+// vaut -1, pas size-1, pour animer le deplacement par le bord le plus
+// proche plutot que de traverser toute la carte. size <= 0 renvoie la
+// distance brute (pas de bouclage possible).
+float shortestWrappedDelta(float from, int to, int size);
+
+// Ramene une coordonnee de tuile (potentiellement hors bornes apres une
+// interpolation qui traverse un bord) dans l'intervalle [0, size).
+// size <= 0 renvoie la valeur inchangee.
+float wrapTileCoord(float value, int size);
 
 // Decalage (en pixels, a ajouter au centre de la tuile) attribue a un type
 // de ressource, pour qu'une tuile contenant plusieurs ressources a la fois

@@ -153,6 +153,9 @@ Test(command_parser, plv_updates_level)
     parser.dispatch("plv #1 4");
 
     cr_assert_eq(state.findPlayer(1)->level, 4);
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::LevelUp);
+    cr_assert_eq(state.effects[0].level, 4);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +190,60 @@ Test(command_parser, pdi_marks_player_dead)
     parser.dispatch("pdi #1");
 
     cr_assert_not(state.findPlayer(1)->alive);
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::Death);
+}
+
+// ---------------------------------------------------------------------------
+// pex / pbc / pfk: expulsion, broadcast, ponte d'oeuf (effets visuels)
+// ---------------------------------------------------------------------------
+
+Test(command_parser, pex_adds_expulsion_effect_at_player_position)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pex #1");
+
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::Expulsion);
+    cr_assert_eq(state.effects[0].x, 2);
+    cr_assert_eq(state.effects[0].y, 3);
+}
+
+Test(command_parser, pbc_adds_broadcast_effect_at_player_position)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pbc #1 hello");
+
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::Broadcast);
+}
+
+Test(command_parser, pfk_adds_egg_laying_effect_at_player_position)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pfk #1");
+
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::EggLaying);
+}
+
+Test(command_parser, pex_of_unknown_player_adds_no_effect, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pex #99");
+
+    cr_assert_eq(state.effects.size(), (size_t)0);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +264,8 @@ Test(command_parser, pgt_takes_resource_from_tile)
     Player *player = state.findPlayer(1);
     cr_assert_eq(player->inventory[0], 1);
     cr_assert_eq(state.tileAt(0, 0).resources[0], 4);
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::ResourcePickup);
 }
 
 Test(command_parser, pdr_drops_resource_on_tile)
@@ -223,6 +282,8 @@ Test(command_parser, pdr_drops_resource_on_tile)
     Player *player = state.findPlayer(1);
     cr_assert_eq(player->inventory[0], 0);
     cr_assert_eq(state.tileAt(0, 0).resources[0], 1);
+    // pgt puis pdr : le dernier effet ajoute doit etre le depot.
+    cr_assert(state.effects.back().kind == EffectKind::ResourceDrop);
 }
 
 Test(command_parser, pdr_never_goes_negative)
@@ -379,6 +440,82 @@ Test(command_parser, edi_removes_egg)
     parser.dispatch("edi #10");
 
     cr_assert_null(state.findEgg(10));
+}
+
+Test(command_parser, ebo_removes_egg_id_from_owning_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 0 0 1 1 rouge");
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("ebo #10");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+Test(command_parser, edi_removes_egg_id_from_owning_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 0 0 1 1 rouge");
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("edi #10");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+// Un oeuf initial (present au lancement de la partie, avant qu'aucun
+// joueur n'ait pondu) n'a pas de parent connu : le protocole peut envoyer
+// un id de parent invalide/negatif pour ce cas. La GUI doit quand meme
+// creer et retrouver l'oeuf, sans planter ni tenter de le lier a une
+// equipe.
+Test(command_parser, enw_with_unknown_parent_still_creates_egg)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("enw #10 #-1 2 2");
+
+    Egg *egg = state.findEgg(10);
+    cr_assert_not_null(egg);
+    cr_assert_eq(egg->playerId, -1);
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+Test(command_parser, hatched_egg_survives_until_hold_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("ebo #10");
+
+    state.advanceEggAnimations(GameState::kEggHatchHoldSeconds / 2.f);
+    cr_assert_not_null(state.findEgg(10));
+
+    state.advanceEggAnimations(GameState::kEggHatchHoldSeconds);
+    cr_assert_null(state.findEgg(10));
+}
+
+Test(command_parser, unhatched_egg_is_not_pruned_by_animation_advance)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("enw #10 #1 2 2");
+
+    state.advanceEggAnimations(10.f);
+
+    cr_assert_not_null(state.findEgg(10));
 }
 
 // ---------------------------------------------------------------------------

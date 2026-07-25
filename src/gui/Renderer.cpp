@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -234,14 +236,82 @@ sf::ContextSettings makeAntialiasedSettings()
 
 }
 
+namespace {
+
+// Aucune police n'est embarquee dans le projet : on tente quelques chemins
+// systeme usuels (Linux principalement) et on se contente de ne pas
+// afficher de texte si aucun ne fonctionne, plutot que de planter.
+bool loadAnySystemFont(sf::Font &font)
+{
+    static const char *kCandidatePaths[] = {
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+    };
+
+    for (const char *path : kCandidatePaths)
+        if (font.loadFromFile(path))
+            return true;
+    return false;
+}
+
+}
+
+namespace {
+
+// Largeur (px) du panneau HUD ajoute a droite de la carte, et hauteur
+// minimale de fenetre pour qu'il reste lisible sur une petite carte.
+// Limite connue : avec beaucoup d'equipes/joueurs sur une petite carte, le
+// contenu du panneau peut quand meme deborder en bas de fenetre (pas de
+// scroll ni de redimensionnement dynamique pour l'instant).
+constexpr float kHudWidth = 260.f;
+constexpr float kHudMinHeight = 500.f;
+
+// Taille maximale de fenetre a l'ouverture (une grande carte ne doit pas
+// creer une fenetre plus grande que l'ecran) : la camera (zoom/pan) permet
+// ensuite de naviguer dans une carte qui ne tient pas entierement a l'ecran.
+constexpr float kMaxWindowWidth = 1280.f;
+constexpr float kMaxWindowHeight = 800.f;
+
+constexpr float kMinZoom = 0.2f;
+constexpr float kMaxZoom = 5.f;
+
+// Taille totale de fenetre = carte + panneau HUD, plafonnee pour ne pas
+// depasser une taille raisonnable meme sur une tres grande carte.
+sf::Vector2u computeWindowSize(int mapWidth, int mapHeight)
+{
+    float mapPxWidth = static_cast<float>(std::max(mapWidth, 1)) * render_theme::kCellSize;
+    float mapPxHeight = static_cast<float>(std::max(mapHeight, 1)) * render_theme::kCellSize;
+
+    float width = std::min(mapPxWidth + kHudWidth, kMaxWindowWidth);
+    float height = std::min(std::max(mapPxHeight, kHudMinHeight), kMaxWindowHeight);
+
+    return sf::Vector2u(static_cast<unsigned int>(width), static_cast<unsigned int>(height));
+}
+
+}
+
 Renderer::Renderer(int initialMapWidth, int initialMapHeight)
-    : _window(sf::VideoMode(
-          static_cast<unsigned int>(std::max(initialMapWidth, 1) * render_theme::kCellSize),
-          static_cast<unsigned int>(std::max(initialMapHeight, 1) * render_theme::kCellSize)),
+    : _window(sf::VideoMode(computeWindowSize(initialMapWidth, initialMapHeight).x,
+          computeWindowSize(initialMapWidth, initialMapHeight).y),
           "Zappy GUI", sf::Style::Default, makeAntialiasedSettings()),
       _lastWidth(initialMapWidth),
       _lastHeight(initialMapHeight),
-      _animPhase(0.f)
+      _animPhase(0.f),
+      _hasFont(loadAnySystemFont(_font)),
+      _zoomLevel(1.f),
+      _panOffset(0.f, 0.f),
+      _hasPendingClick(false),
+      _pendingClickPx(0, 0),
+      _selectedPlayerId(-1),
+      _hasSelectedTile(false),
+      _selectedTileX(-1),
+      _selectedTileY(-1)
 {
     _window.setVerticalSyncEnabled(true);
 }
@@ -258,6 +328,39 @@ void Renderer::pollEvents()
     while (_window.pollEvent(event)) {
         if (event.type == sf::Event::Closed)
             _window.close();
+
+        if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            _hasPendingClick = true;
+            _pendingClickPx = sf::Vector2i(event.mouseButton.x, event.mouseButton.y);
+        }
+
+        // La reponse effective au redimensionnement (recalcul du viewport
+        // letterboxe) se fait chaque frame dans updateMapView(), a partir
+        // de _window.getSize() qui reflete deja la nouvelle taille : on
+        // consomme quand meme l'evenement explicitement pour ne pas
+        // laisser SFML avec une vue par defaut perimee entre deux frames.
+        if (event.type == sf::Event::Resized) {
+            sf::FloatRect visibleArea(0.f, 0.f,
+                static_cast<float>(event.size.width), static_cast<float>(event.size.height));
+            _window.setView(sf::View(visibleArea));
+        }
+
+        if (event.type == sf::Event::MouseWheelScrolled) {
+            float factor = event.mouseWheelScroll.delta > 0.f ? 1.1f : (1.f / 1.1f);
+            _zoomLevel = std::max(kMinZoom, std::min(_zoomLevel * factor, kMaxZoom));
+        }
+
+        if (event.type == sf::Event::KeyPressed) {
+            constexpr float kPanStepPx = 40.f;
+            if (event.key.code == sf::Keyboard::Left)
+                _panOffset.x -= kPanStepPx;
+            else if (event.key.code == sf::Keyboard::Right)
+                _panOffset.x += kPanStepPx;
+            else if (event.key.code == sf::Keyboard::Up)
+                _panOffset.y -= kPanStepPx;
+            else if (event.key.code == sf::Keyboard::Down)
+                _panOffset.y += kPanStepPx;
+        }
     }
 }
 
@@ -268,11 +371,42 @@ void Renderer::ensureWindowSize(int mapWidth, int mapHeight)
     if (mapWidth == _lastWidth && mapHeight == _lastHeight)
         return;
 
-    _window.setSize(sf::Vector2u(
-        static_cast<unsigned int>(mapWidth * render_theme::kCellSize),
-        static_cast<unsigned int>(mapHeight * render_theme::kCellSize)));
+    _window.setSize(computeWindowSize(mapWidth, mapHeight));
     _lastWidth = mapWidth;
     _lastHeight = mapHeight;
+    // Nouvelle carte (ou premier msz) : repart d'une camera neutre plutot
+    // que de garder le zoom/pan de la carte precedente.
+    _zoomLevel = 1.f;
+    _panOffset = sf::Vector2f(0.f, 0.f);
+}
+
+void Renderer::updateMapView(int mapWidth, int mapHeight)
+{
+    sf::Vector2u winSize = _window.getSize();
+    float mapAreaWidthPx = std::max(1.f, static_cast<float>(winSize.x) - kHudWidth);
+    float mapAreaHeightPx = std::max(1.f, static_cast<float>(winSize.y));
+
+    float mapPxWidth = static_cast<float>(std::max(mapWidth, 1)) * render_theme::kCellSize;
+    float mapPxHeight = static_cast<float>(std::max(mapHeight, 1)) * render_theme::kCellSize;
+
+    // Letterbox : la carte garde son ratio d'aspect au lieu d'etre etiree
+    // pour remplir toute la zone disponible.
+    float fitScale = std::min(mapAreaWidthPx / mapPxWidth, mapAreaHeightPx / mapPxHeight);
+    float letterboxWidthPx = mapPxWidth * fitScale;
+    float letterboxHeightPx = mapPxHeight * fitScale;
+    float letterboxLeftPx = (mapAreaWidthPx - letterboxWidthPx) / 2.f;
+    float letterboxTopPx = (mapAreaHeightPx - letterboxHeightPx) / 2.f;
+
+    _mapViewportPx = sf::FloatRect(letterboxLeftPx, letterboxTopPx, letterboxWidthPx, letterboxHeightPx);
+
+    _mapView.setViewport(sf::FloatRect(
+        letterboxLeftPx / static_cast<float>(winSize.x),
+        letterboxTopPx / static_cast<float>(winSize.y),
+        letterboxWidthPx / static_cast<float>(winSize.x),
+        letterboxHeightPx / static_cast<float>(winSize.y)));
+
+    _mapView.setSize(mapPxWidth / _zoomLevel, mapPxHeight / _zoomLevel);
+    _mapView.setCenter(mapPxWidth / 2.f + _panOffset.x, mapPxHeight / 2.f + _panOffset.y);
 }
 
 void Renderer::drawGrid(int mapWidth, int mapHeight)
@@ -314,12 +448,13 @@ void Renderer::drawTiles(const GameState &state)
                 sf::Vector2f slotPos(center.x + slotOffset.x, center.y + slotOffset.y);
 
                 sf::Color resourceColor = toSfColor(render_theme::resourceColor(r));
+                float quantityScale = render_theme::resourceQuantityScale(tile.resources[r]);
 
                 if (render_theme::isRareResource(r)) {
                     // pulsation resserree (0.85-1.15) pour ne jamais devenir
                     // trop petite/pale a l'ecran.
                     float pulse = 1.f + 0.15f * std::sin(_animPhase * 4.f);
-                    sf::CircleShape power(render_theme::kCellSize * 0.13f * pulse);
+                    sf::CircleShape power(render_theme::kCellSize * 0.13f * pulse * quantityScale);
                     power.setFillColor(resourceColor);
                     power.setOutlineThickness(1.2f);
                     power.setOutlineColor(sf::Color(255, 255, 255, 180));
@@ -327,7 +462,7 @@ void Renderer::drawTiles(const GameState &state)
                     power.setPosition(slotPos);
                     _window.draw(power);
                 } else {
-                    sf::CircleShape pellet(render_theme::kCellSize * 0.05f);
+                    sf::CircleShape pellet(render_theme::kCellSize * 0.05f * quantityScale);
                     pellet.setFillColor(resourceColor);
                     pellet.setOrigin(pellet.getRadius(), pellet.getRadius());
                     pellet.setPosition(slotPos);
@@ -371,21 +506,44 @@ void Renderer::drawIncantations(const GameState &state)
 
 void Renderer::drawEggs(const GameState &state)
 {
+    // Duree de l'animation de ponte/apparition (grossit depuis 0). Le
+    // "pop" d'eclosion, lui, dure GameState::kEggHatchHoldSeconds (partage
+    // avec la purge de l'etat, pour disparaitre juste apres l'animation).
+    constexpr float kSpawnAnimSeconds = 0.35f;
+
     for (const auto &pair : state.eggs) {
         const Egg &egg = pair.second;
-        if (egg.hatched)
-            continue;
 
         render_theme::PixelPos center = render_theme::tileCenterPx(egg.x, egg.y);
         float bob = std::sin(_animPhase * 3.f) * render_theme::kCellSize * 0.05f;
         float boxSize = render_theme::kCellSize * 0.62f;
+        float alphaRatio = 1.f;
+
+        if (egg.hatched) {
+            // Eclosion : un petit "pop" (grossit legerement) puis
+            // disparait en fondu, avant d'etre retire de l'etat.
+            float hatchT = std::min(egg.hatchedElapsedSeconds / GameState::kEggHatchHoldSeconds, 1.f);
+            boxSize *= 1.f + 0.4f * hatchT;
+            alphaRatio = 1.f - hatchT;
+        } else {
+            // Ponte : grossit depuis 0 a l'apparition plutot que de
+            // surgir d'un coup a pleine taille.
+            float spawnT = std::min(egg.ageSeconds / kSpawnAnimSeconds, 1.f);
+            boxSize *= spawnT;
+        }
+
+        if (boxSize <= 0.f || alphaRatio <= 0.f)
+            continue;
+
         float scale = boxSize / 40.f;
         sf::Vector2f bodyPos(center.x, center.y + bob);
+        unsigned char alpha = static_cast<unsigned char>(255.f * alphaRatio);
 
-        drawGlow(_window, bodyPos, boxSize * 0.85f, sf::Color(255, 92, 179), 130);
+        drawGlow(_window, bodyPos, boxSize * 0.85f, sf::Color(255, 92, 179),
+            static_cast<unsigned char>(130.f * alphaRatio));
 
         sf::ConvexShape ghost = makeGhostShape(boxSize);
-        ghost.setFillColor(sf::Color(255, 92, 179));
+        ghost.setFillColor(sf::Color(255, 92, 179, alpha));
         ghost.setPosition(bodyPos);
         _window.draw(ghost);
 
@@ -393,13 +551,13 @@ void Renderer::drawEggs(const GameState &state)
             sf::Vector2f eyePos(bodyPos.x + side * 6.f * scale, bodyPos.y - 1.f * scale);
 
             sf::CircleShape eye(4.2f * scale);
-            eye.setFillColor(sf::Color::White);
+            eye.setFillColor(sf::Color(255, 255, 255, alpha));
             eye.setOrigin(eye.getRadius(), eye.getRadius());
             eye.setPosition(eyePos);
             _window.draw(eye);
 
             sf::CircleShape pupil(2.f * scale);
-            pupil.setFillColor(sf::Color(26, 26, 46));
+            pupil.setFillColor(sf::Color(26, 26, 46, alpha));
             pupil.setOrigin(pupil.getRadius(), pupil.getRadius());
             pupil.setPosition(eyePos.x + side * 1.3f * scale, eyePos.y);
             _window.draw(pupil);
@@ -407,36 +565,437 @@ void Renderer::drawEggs(const GameState &state)
     }
 }
 
+void Renderer::drawEffects(const GameState &state)
+{
+    for (const TransientEffect &effect : state.effects) {
+        float t = std::min(effect.elapsedSeconds / effect.durationSeconds, 1.f);
+        render_theme::PixelPos center = render_theme::tileCenterPx(effect.x, effect.y);
+        unsigned char alpha = static_cast<unsigned char>(255.f * (1.f - t));
+
+        switch (effect.kind) {
+        case EffectKind::ResourcePickup:
+        case EffectKind::ResourceDrop: {
+            // Remonte vers le joueur pour un ramassage, descend vers le
+            // sol pour un depot.
+            render_theme::RgbColor color = render_theme::resourceColor(effect.resourceIndex);
+            float direction = effect.kind == EffectKind::ResourcePickup ? -1.f : 1.f;
+            float offset = direction * t * render_theme::kCellSize * 0.5f;
+
+            sf::CircleShape dot(4.f * (1.f - 0.3f * t));
+            dot.setFillColor(sf::Color(color.r, color.g, color.b, alpha));
+            dot.setOrigin(dot.getRadius(), dot.getRadius());
+            dot.setPosition(center.x, center.y + offset);
+            _window.draw(dot);
+            break;
+        }
+        case EffectKind::Expulsion: {
+            sf::CircleShape ring(render_theme::kCellSize * (0.3f + 0.8f * t));
+            ring.setFillColor(sf::Color::Transparent);
+            ring.setOutlineThickness(3.f);
+            ring.setOutlineColor(sf::Color(255, 140, 40, alpha));
+            ring.setOrigin(ring.getRadius(), ring.getRadius());
+            ring.setPosition(toSfVec(center));
+            _window.draw(ring);
+            break;
+        }
+        case EffectKind::Broadcast: {
+            // Deux anneaux "onde sonore" decales dans le temps.
+            for (int i = 0; i < 2; ++i) {
+                float ringT = std::min(t + static_cast<float>(i) * 0.25f, 1.f);
+                unsigned char ringAlpha = static_cast<unsigned char>(180.f * (1.f - ringT));
+
+                sf::CircleShape ring(render_theme::kCellSize * (0.4f + 1.4f * ringT));
+                ring.setFillColor(sf::Color::Transparent);
+                ring.setOutlineThickness(2.f);
+                ring.setOutlineColor(sf::Color(120, 220, 255, ringAlpha));
+                ring.setOrigin(ring.getRadius(), ring.getRadius());
+                ring.setPosition(toSfVec(center));
+                _window.draw(ring);
+            }
+            break;
+        }
+        case EffectKind::EggLaying: {
+            sf::CircleShape pulse(render_theme::kCellSize * (0.15f + 0.25f * t));
+            pulse.setFillColor(sf::Color(255, 92, 179, alpha));
+            pulse.setOrigin(pulse.getRadius(), pulse.getRadius());
+            pulse.setPosition(center.x, center.y + render_theme::kCellSize * 0.2f);
+            _window.draw(pulse);
+            break;
+        }
+        case EffectKind::Death: {
+            sf::CircleShape fade(render_theme::kCellSize * 0.32f * (1.f - 0.6f * t));
+            fade.setFillColor(sf::Color(120, 20, 20, alpha));
+            fade.setOutlineThickness(2.f);
+            fade.setOutlineColor(sf::Color(200, 40, 40, alpha));
+            fade.setOrigin(fade.getRadius(), fade.getRadius());
+            fade.setPosition(toSfVec(center));
+            _window.draw(fade);
+            break;
+        }
+        case EffectKind::LevelUp: {
+            sf::CircleShape burst(render_theme::kCellSize * (0.25f + 0.5f * t));
+            burst.setFillColor(sf::Color::Transparent);
+            burst.setOutlineThickness(2.5f);
+            burst.setOutlineColor(sf::Color(120, 255, 140, alpha));
+            burst.setOrigin(burst.getRadius(), burst.getRadius());
+            burst.setPosition(toSfVec(center));
+            _window.draw(burst);
+
+            if (effect.level > 0) {
+                sf::Vector2f pipsPos(center.x, center.y - render_theme::kCellSize * 0.55f - t * 10.f);
+                drawLevelPips(_window, pipsPos, effect.level, alpha);
+            }
+            break;
+        }
+        }
+    }
+}
+
 void Renderer::drawPlayers(const GameState &state)
 {
     float mouthHalf = render_theme::mouthHalfAngleDeg(_animPhase);
-    float radius = render_theme::kCellSize * 0.32f;
+
+    // Regroupe les joueurs vivants par tuile visuelle (position animee
+    // arrondie a la case la plus proche) : sans ca, plusieurs joueurs sur
+    // la meme case se dessinaient exactement les uns sur les autres.
+    std::map<std::pair<int, int>, std::vector<const Player *>> clusters;
+    for (const auto &pair : state.players) {
+        const Player &player = pair.second;
+        if (!player.alive)
+            continue;
+        int tileX = static_cast<int>(std::lround(player.animX));
+        int tileY = static_cast<int>(std::lround(player.animY));
+        clusters[{tileX, tileY}].push_back(&player);
+    }
+
+    for (const auto &clusterEntry : clusters) {
+        const std::vector<const Player *> &group = clusterEntry.second;
+        std::size_t count = group.size();
+
+        // Centre la case sur la position moyenne du groupe plutot que sur
+        // la case arrondie : des joueurs qui convergent vers la meme case
+        // depuis des directions differentes se regroupent en douceur au
+        // lieu de sauter d'un coup a la position finale.
+        float cx = 0.f, cy = 0.f;
+        for (const Player *player : group) {
+            cx += player->animX;
+            cy += player->animY;
+        }
+        cx /= static_cast<float>(count);
+        cy /= static_cast<float>(count);
+        sf::Vector2f clusterCenter = toSfVec(render_theme::tileCenterPxF(cx, cy));
+
+        // Reduit la taille et etale les joueurs en cercle quand ils sont
+        // plusieurs sur la meme case, pour qu'ils restent distinguables
+        // au lieu de se superposer.
+        float scale = count == 1 ? 1.f : std::max(0.45f, 1.f - 0.12f * static_cast<float>(count - 1));
+        float radius = render_theme::kCellSize * 0.32f * scale;
+        float spreadRadius = count == 1 ? 0.f : render_theme::kCellSize * 0.24f;
+
+        for (std::size_t i = 0; i < count; ++i) {
+            const Player &player = *group[i];
+            sf::Vector2f center = clusterCenter;
+
+            if (count > 1) {
+                float angleDeg = static_cast<float>(i) * (360.f / static_cast<float>(count)) - 90.f;
+                float rad = angleDeg * kPi / 180.f;
+                center.x += std::cos(rad) * spreadRadius;
+                center.y += std::sin(rad) * spreadRadius;
+            }
+
+            render_theme::RgbColor team = render_theme::teamColor(player.team);
+
+            drawGlow(_window, center, radius * 2.2f, sf::Color(255, 216, 10), count == 1 ? 150 : 90);
+
+            sf::CircleShape ring(radius + 2.5f * scale);
+            ring.setFillColor(sf::Color::Transparent);
+            ring.setOutlineThickness(2.5f * scale);
+            ring.setOutlineColor(toSfColor(team));
+            ring.setOrigin(ring.getRadius(), ring.getRadius());
+            ring.setPosition(center);
+            _window.draw(ring);
+
+            sf::ConvexShape pacman = makePacmanShape(radius, mouthHalf);
+            pacman.setFillColor(sf::Color(255, 216, 10));
+            pacman.setOutlineThickness(1.5f);
+            pacman.setOutlineColor(sf::Color(120, 90, 0));
+            pacman.setPosition(center);
+            pacman.setRotation(render_theme::orientationAngleDeg(static_cast<int>(player.orientation)));
+            _window.draw(pacman);
+        }
+    }
+}
+
+void Renderer::updatePlayerAnimations(GameState &state, float dt)
+{
+    // Duree de lissage : plus petit = rattrape la position reelle plus
+    // vite. 0.12s glisse visiblement d'une case a l'autre sans jamais
+    // accumuler de retard perceptible sur des deplacements a la frequence
+    // normale du serveur (1 case par tick).
+    constexpr float kMoveSmoothingTau = 0.12f;
+
+    if (state.mapWidth <= 0 || state.mapHeight <= 0 || dt <= 0.f)
+        return;
+
+    float factor = 1.f - std::exp(-dt / kMoveSmoothingTau);
+
+    for (auto &pair : state.players) {
+        Player &player = pair.second;
+        float dx = render_theme::shortestWrappedDelta(player.animX, player.x, state.mapWidth);
+        float dy = render_theme::shortestWrappedDelta(player.animY, player.y, state.mapHeight);
+
+        player.animX = render_theme::wrapTileCoord(player.animX + dx * factor, state.mapWidth);
+        player.animY = render_theme::wrapTileCoord(player.animY + dy * factor, state.mapHeight);
+    }
+}
+
+void Renderer::drawGameOverBanner(const GameState &state)
+{
+    if (!state.gameOver)
+        return;
+
+    sf::Vector2u size = _window.getSize();
+    sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(size.x), static_cast<float>(size.y)));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    _window.draw(overlay);
+
+    render_theme::RgbColor teamColor = render_theme::teamColor(state.winningTeam);
+    sf::Vector2f center(static_cast<float>(size.x) / 2.f, static_cast<float>(size.y) / 2.f);
+
+    float pulse = 0.85f + 0.15f * std::sin(_animPhase * 3.f);
+    sf::CircleShape banner(std::min(size.x, size.y) * 0.28f * pulse);
+    banner.setFillColor(sf::Color::Transparent);
+    banner.setOutlineThickness(4.f);
+    banner.setOutlineColor(toSfColor(teamColor));
+    banner.setOrigin(banner.getRadius(), banner.getRadius());
+    banner.setPosition(center);
+    _window.draw(banner);
+
+    if (!_hasFont)
+        return;
+
+    sf::Text title("VICTOIRE", _font, 28);
+    title.setStyle(sf::Text::Bold);
+    title.setFillColor(sf::Color::White);
+    sf::FloatRect titleBounds = title.getLocalBounds();
+    title.setOrigin(titleBounds.left + titleBounds.width / 2.f, titleBounds.top + titleBounds.height / 2.f);
+    title.setPosition(center.x, center.y - 22.f);
+    _window.draw(title);
+
+    sf::Text teamText("Equipe " + state.winningTeam, _font, 18);
+    teamText.setFillColor(toSfColor(teamColor));
+    sf::FloatRect teamBounds = teamText.getLocalBounds();
+    teamText.setOrigin(teamBounds.left + teamBounds.width / 2.f, teamBounds.top + teamBounds.height / 2.f);
+    teamText.setPosition(center.x, center.y + 14.f);
+    _window.draw(teamText);
+}
+
+void Renderer::processPendingClick(const GameState &state)
+{
+    if (!_hasPendingClick)
+        return;
+    _hasPendingClick = false;
+
+    // Clic hors du rectangle ecran occupe par la vue carte (panneau HUD,
+    // ou bande noire du letterbox) : rien a selectionner.
+    if (!_mapViewportPx.contains(static_cast<float>(_pendingClickPx.x), static_cast<float>(_pendingClickPx.y)))
+        return;
+
+    // Convertit le pixel ecran en coordonnees "carte" (en tenant compte du
+    // zoom/pan courants de _mapView), pour un hit-test correct meme
+    // lorsque la camera n'est pas a son etat par defaut.
+    sf::Vector2f mapPos = _window.mapPixelToCoords(_pendingClickPx, _mapView);
+    float clickX = mapPos.x;
+    float clickY = mapPos.y;
+
+    // Joueur le plus proche du clic, dans un rayon raisonnable (permet de
+    // cliquer un joueur meme sans viser exactement son centre).
+    float pickRadius = render_theme::kCellSize * 0.5f;
+    float bestDistSq = pickRadius * pickRadius;
+    int bestId = -1;
 
     for (const auto &pair : state.players) {
         const Player &player = pair.second;
         if (!player.alive)
             continue;
+        render_theme::PixelPos center = render_theme::tileCenterPxF(player.animX, player.animY);
+        float dx = center.x - clickX;
+        float dy = center.y - clickY;
+        float distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) {
+            bestDistSq = distSq;
+            bestId = player.id;
+        }
+    }
 
-        render_theme::PixelPos center = render_theme::tileCenterPx(player.x, player.y);
-        render_theme::RgbColor team = render_theme::teamColor(player.team);
+    if (bestId >= 0) {
+        _selectedPlayerId = bestId;
+        _hasSelectedTile = false;
+        return;
+    }
 
-        drawGlow(_window, toSfVec(center), radius * 2.2f, sf::Color(255, 216, 10), 150);
+    int tileX = static_cast<int>(clickX / render_theme::kCellSize);
+    int tileY = static_cast<int>(clickY / render_theme::kCellSize);
+    if (tileX >= 0 && tileX < state.mapWidth && tileY >= 0 && tileY < state.mapHeight) {
+        _selectedTileX = tileX;
+        _selectedTileY = tileY;
+        _hasSelectedTile = true;
+        _selectedPlayerId = -1;
+    }
+}
 
-        sf::CircleShape ring(radius + 2.5f);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(2.5f);
-        ring.setOutlineColor(toSfColor(team));
-        ring.setOrigin(ring.getRadius(), ring.getRadius());
-        ring.setPosition(toSfVec(center));
-        _window.draw(ring);
+void Renderer::drawText(const std::string &text, sf::Vector2f pos, unsigned int charSize,
+    sf::Color color, bool bold)
+{
+    if (!_hasFont)
+        return;
 
-        sf::ConvexShape pacman = makePacmanShape(radius, mouthHalf);
-        pacman.setFillColor(sf::Color(255, 216, 10));
-        pacman.setOutlineThickness(1.5f);
-        pacman.setOutlineColor(sf::Color(120, 90, 0));
-        pacman.setPosition(toSfVec(center));
-        pacman.setRotation(render_theme::orientationAngleDeg(static_cast<int>(player.orientation)));
-        _window.draw(pacman);
+    sf::Text sfText(text, _font, charSize);
+    if (bold)
+        sfText.setStyle(sf::Text::Bold);
+    sfText.setFillColor(color);
+    sfText.setPosition(pos);
+    _window.draw(sfText);
+}
+
+void Renderer::drawHud(const GameState &state)
+{
+    static const char *kResourceNames[RESOURCE_COUNT] = {
+        "food", "linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"
+    };
+
+    sf::Vector2u winSize = _window.getSize();
+    // La zone carte passe par une camera (zoom/pan/letterbox) depuis
+    // updateMapView() : le panneau HUD occupe toujours exactement
+    // kHudWidth a droite de la fenetre, quelle que soit la taille reelle
+    // (en pixels carte) de la carte affichee.
+    float hudPanelX = std::max(0.f, static_cast<float>(winSize.x) - kHudWidth);
+    float panelWidth = static_cast<float>(winSize.x) - hudPanelX;
+
+    sf::RectangleShape panel(sf::Vector2f(panelWidth, static_cast<float>(winSize.y)));
+    panel.setPosition(hudPanelX, 0.f);
+    panel.setFillColor(sf::Color(18, 18, 30, 255));
+    _window.draw(panel);
+
+    if (!_hasFont)
+        return;
+
+    const float padding = 12.f;
+    float x = hudPanelX + padding;
+    float y = padding;
+
+    drawText("EQUIPES", sf::Vector2f(x, y), 14, sf::Color(180, 180, 200), true);
+    y += 20.f;
+
+    for (const auto &teamPair : state.teams) {
+        const Team &team = teamPair.second;
+        render_theme::RgbColor teamRgb = render_theme::teamColor(team.name);
+
+        std::size_t aliveCount = 0;
+        for (int pid : team.playerIds) {
+            const Player *player = state.findPlayer(pid);
+            if (player && player->alive)
+                ++aliveCount;
+        }
+
+        sf::RectangleShape swatch(sf::Vector2f(10.f, 10.f));
+        swatch.setFillColor(toSfColor(teamRgb));
+        swatch.setPosition(x, y + 3.f);
+        _window.draw(swatch);
+
+        drawText(team.name + "  " + std::to_string(aliveCount) + "/"
+            + std::to_string(team.playerIds.size()) + " vivant(s)",
+            sf::Vector2f(x + 16.f, y), 13, sf::Color::White);
+        y += 18.f;
+
+        // Liste id/niveau des joueurs vivants, plafonnee pour ne pas
+        // deborder du panneau sur une grosse partie.
+        constexpr std::size_t kMaxListedPlayers = 6;
+        std::size_t listed = 0;
+        for (int pid : team.playerIds) {
+            const Player *player = state.findPlayer(pid);
+            if (!player || !player->alive)
+                continue;
+            if (listed >= kMaxListedPlayers) {
+                drawText("  ...", sf::Vector2f(x + 16.f, y), 12, sf::Color(150, 150, 160));
+                y += 15.f;
+                break;
+            }
+            drawText("  #" + std::to_string(player->id) + "  Lv" + std::to_string(player->level),
+                sf::Vector2f(x + 16.f, y), 12, sf::Color(190, 190, 200));
+            y += 15.f;
+            ++listed;
+        }
+        y += 8.f;
+    }
+
+    y += 6.f;
+    drawText("Frequence: " + std::to_string(state.timeUnit), sf::Vector2f(x, y), 13, sf::Color(200, 200, 210));
+    y += 24.f;
+
+    drawText("RESSOURCES", sf::Vector2f(x, y), 14, sf::Color(180, 180, 200), true);
+    y += 20.f;
+    for (int r = 0; r < RESOURCE_COUNT; ++r) {
+        sf::CircleShape dot(5.f);
+        dot.setFillColor(toSfColor(render_theme::resourceColor(r)));
+        dot.setOrigin(dot.getRadius(), dot.getRadius());
+        dot.setPosition(x + 5.f, y + 6.f);
+        _window.draw(dot);
+        drawText(kResourceNames[r], sf::Vector2f(x + 16.f, y), 12, sf::Color(190, 190, 200));
+        y += 16.f;
+    }
+    y += 10.f;
+
+    const Player *selectedPlayer = _selectedPlayerId >= 0 ? state.findPlayer(_selectedPlayerId) : nullptr;
+
+    if (selectedPlayer && selectedPlayer->alive) {
+        drawText("JOUEUR #" + std::to_string(selectedPlayer->id), sf::Vector2f(x, y), 14,
+            sf::Color(255, 216, 10), true);
+        y += 20.f;
+        drawText("Equipe: " + selectedPlayer->team, sf::Vector2f(x, y), 12, sf::Color(200, 200, 210));
+        y += 16.f;
+        drawText("Niveau: " + std::to_string(selectedPlayer->level), sf::Vector2f(x, y), 12,
+            sf::Color(200, 200, 210));
+        y += 18.f;
+        drawText("Inventaire:", sf::Vector2f(x, y), 12, sf::Color(180, 180, 200));
+        y += 16.f;
+        for (int r = 0; r < RESOURCE_COUNT; ++r) {
+            sf::CircleShape dot(4.f);
+            dot.setFillColor(toSfColor(render_theme::resourceColor(r)));
+            dot.setOrigin(dot.getRadius(), dot.getRadius());
+            dot.setPosition(x + 9.f, y + 6.f);
+            _window.draw(dot);
+            drawText(std::string(kResourceNames[r]) + ": " + std::to_string(selectedPlayer->inventory[r]),
+                sf::Vector2f(x + 18.f, y), 12, sf::Color(190, 190, 200));
+            y += 15.f;
+        }
+    } else if (_hasSelectedTile && _selectedTileX < state.mapWidth && _selectedTileY < state.mapHeight) {
+        drawText("CASE (" + std::to_string(_selectedTileX) + "," + std::to_string(_selectedTileY) + ")",
+            sf::Vector2f(x, y), 14, sf::Color(255, 216, 10), true);
+        y += 20.f;
+        const Tile &tile = state.tileAt(_selectedTileX, _selectedTileY);
+        bool anyResource = false;
+        for (int r = 0; r < RESOURCE_COUNT; ++r) {
+            if (tile.resources[r] <= 0)
+                continue;
+            anyResource = true;
+            sf::CircleShape dot(4.f);
+            dot.setFillColor(toSfColor(render_theme::resourceColor(r)));
+            dot.setOrigin(dot.getRadius(), dot.getRadius());
+            dot.setPosition(x + 9.f, y + 6.f);
+            _window.draw(dot);
+            drawText(std::string(kResourceNames[r]) + ": " + std::to_string(tile.resources[r]),
+                sf::Vector2f(x + 18.f, y), 12, sf::Color(190, 190, 200));
+            y += 15.f;
+        }
+        if (!anyResource)
+            drawText("(vide)", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+    } else {
+        drawText("Clique sur un joueur", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+        y += 15.f;
+        drawText("ou une case pour plus", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
+        y += 15.f;
+        drawText("de details.", sf::Vector2f(x, y), 12, sf::Color(140, 140, 150));
     }
 }
 
@@ -444,13 +1003,28 @@ void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
+    state.advanceEggAnimations(dt);
+    state.advanceEffects(dt);
+    updatePlayerAnimations(state, dt);
     ensureWindowSize(state.mapWidth, state.mapHeight);
+    updateMapView(state.mapWidth, state.mapHeight);
+    processPendingClick(state);
 
     _window.clear(sf::Color::Black);
+
+    // Zone carte : passe par la camera (zoom/pan/letterbox).
+    _window.setView(_mapView);
     drawGrid(state.mapWidth, state.mapHeight);
     drawTiles(state);
     drawIncantations(state);
     drawEggs(state);
     drawPlayers(state);
+    drawEffects(state);
+
+    // HUD et bandeau de fin : coordonnees ecran fixes, jamais affectees
+    // par le zoom/pan de la carte.
+    _window.setView(_window.getDefaultView());
+    drawHud(state);
+    drawGameOverBanner(state);
     _window.display();
 }

@@ -31,6 +31,13 @@ struct Player {
     std::string team;
     std::array<int, RESOURCE_COUNT> inventory{};
     bool alive = false;
+
+    // Position affichee (en tuiles, fractionnaire), interpolee par
+    // Renderer vers (x, y) a chaque frame au lieu de teleporter le joueur
+    // sur un ppo. CommandParser l'initialise a (x, y) a la creation du
+    // joueur pour ne pas animer depuis (0, 0) a l'apparition.
+    float animX = 0.f;
+    float animY = 0.f;
 };
 
 struct Team {
@@ -51,10 +58,36 @@ struct Incantation {
 
 struct Egg {
     int id = -1;
-    int playerId = -1;
+    int playerId = -1; // -1 pour un oeuf initial sans parent connu (cf enw)
     int x = -1;
     int y = -1;
     bool hatched = false;
+    float ageSeconds = 0.f;            // depuis enw, pour l'animation de ponte/apparition
+    float hatchedElapsedSeconds = 0.f; // depuis ebo, avant nettoyage (voir advanceEggAnimations)
+};
+
+// Evenement ponctuel (pgt/pdr/pex/pbc/pfk/pdi/plv) : ces commandes ne
+// changent qu'un etat instantane (inventaire, vie, niveau...) sans laisser
+// de trace visuelle. TransientEffect leur donne une existence breve dans
+// l'etat, le temps que Renderer les anime, avant d'etre purgees.
+enum class EffectKind {
+    ResourcePickup, // pgt
+    ResourceDrop,   // pdr
+    Expulsion,      // pex
+    Broadcast,      // pbc
+    EggLaying,      // pfk
+    Death,          // pdi
+    LevelUp,        // plv
+};
+
+struct TransientEffect {
+    EffectKind kind;
+    int x = -1;
+    int y = -1;
+    int resourceIndex = -1; // pertinent pour ResourcePickup/ResourceDrop
+    int level = -1;         // pertinent pour LevelUp
+    float elapsedSeconds = 0.f;
+    float durationSeconds = 0.6f;
 };
 
 struct GameState {
@@ -68,6 +101,7 @@ struct GameState {
     std::unordered_map<std::string, Team> teams;
     std::vector<Incantation> incantations;
     std::unordered_map<int, Egg> eggs;
+    std::vector<TransientEffect> effects;
 
     void resizeMap(int width, int height)
     {
@@ -129,6 +163,46 @@ struct GameState {
                 }
             }
             ++it;
+        }
+    }
+
+    // Duree (s) pendant laquelle un oeuf eclos reste affiche (animation de
+    // sortie) avant d'etre retire de l'etat.
+    static constexpr float kEggHatchHoldSeconds = 0.5f;
+
+    // Fait vieillir chaque oeuf (anime son apparition) et purge ceux dont
+    // l'animation d'eclosion est terminee. A appeler une fois par frame.
+    void advanceEggAnimations(float dt)
+    {
+        for (auto it = eggs.begin(); it != eggs.end(); ) {
+            it->second.ageSeconds += dt;
+            if (it->second.hatched) {
+                it->second.hatchedElapsedSeconds += dt;
+                if (it->second.hatchedElapsedSeconds >= kEggHatchHoldSeconds) {
+                    it = eggs.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+    }
+
+    void addEffect(EffectKind kind, int x, int y, int resourceIndex = -1, int level = -1,
+        float durationSeconds = 0.6f)
+    {
+        effects.push_back(TransientEffect{kind, x, y, resourceIndex, level, 0.f, durationSeconds});
+    }
+
+    // Purge les effets ponctuels dont la duree d'affichage est ecoulee. A
+    // appeler une fois par frame avec le dt ecoule.
+    void advanceEffects(float dt)
+    {
+        for (auto it = effects.begin(); it != effects.end(); ) {
+            it->elapsedSeconds += dt;
+            if (it->elapsedSeconds >= it->durationSeconds)
+                it = effects.erase(it);
+            else
+                ++it;
         }
     }
 
