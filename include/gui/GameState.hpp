@@ -31,6 +31,13 @@ struct Player {
     std::string team;
     std::array<int, RESOURCE_COUNT> inventory{};
     bool alive = false;
+
+    // Position affichee (en tuiles, fractionnaire), interpolee par
+    // Renderer vers (x, y) a chaque frame au lieu de teleporter le joueur
+    // sur un ppo. CommandParser l'initialise a (x, y) a la creation du
+    // joueur pour ne pas animer depuis (0, 0) a l'apparition.
+    float animX = 0.f;
+    float animY = 0.f;
 };
 
 struct Team {

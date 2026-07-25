@@ -417,7 +417,7 @@ void Renderer::drawPlayers(const GameState &state)
         if (!player.alive)
             continue;
 
-        render_theme::PixelPos center = render_theme::tileCenterPx(player.x, player.y);
+        render_theme::PixelPos center = render_theme::tileCenterPxF(player.animX, player.animY);
         render_theme::RgbColor team = render_theme::teamColor(player.team);
 
         drawGlow(_window, toSfVec(center), radius * 2.2f, sf::Color(255, 216, 10), 150);
@@ -440,10 +440,34 @@ void Renderer::drawPlayers(const GameState &state)
     }
 }
 
+void Renderer::updatePlayerAnimations(GameState &state, float dt)
+{
+    // Duree de lissage : plus petit = rattrape la position reelle plus
+    // vite. 0.12s glisse visiblement d'une case a l'autre sans jamais
+    // accumuler de retard perceptible sur des deplacements a la frequence
+    // normale du serveur (1 case par tick).
+    constexpr float kMoveSmoothingTau = 0.12f;
+
+    if (state.mapWidth <= 0 || state.mapHeight <= 0 || dt <= 0.f)
+        return;
+
+    float factor = 1.f - std::exp(-dt / kMoveSmoothingTau);
+
+    for (auto &pair : state.players) {
+        Player &player = pair.second;
+        float dx = render_theme::shortestWrappedDelta(player.animX, player.x, state.mapWidth);
+        float dy = render_theme::shortestWrappedDelta(player.animY, player.y, state.mapHeight);
+
+        player.animX = render_theme::wrapTileCoord(player.animX + dx * factor, state.mapWidth);
+        player.animY = render_theme::wrapTileCoord(player.animY + dy * factor, state.mapHeight);
+    }
+}
+
 void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
+    updatePlayerAnimations(state, dt);
     ensureWindowSize(state.mapWidth, state.mapHeight);
 
     _window.clear(sf::Color::Black);

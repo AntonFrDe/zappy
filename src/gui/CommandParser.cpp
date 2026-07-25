@@ -187,6 +187,10 @@ void CommandParser::handlePnw(std::istringstream &args)
     player.level = level;
     player.team = team;
     player.alive = true;
+    // Pas d'animation de deplacement a l'apparition : evite de le voir
+    // glisser depuis (0, 0) au moment ou il rejoint la partie.
+    player.animX = static_cast<float>(x);
+    player.animY = static_cast<float>(y);
 
     _state.players[id] = player;
 

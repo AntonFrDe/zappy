@@ -117,3 +117,34 @@ Test(render_theme, tile_center_px_for_arbitrary_tile)
     cr_assert_float_eq(center.x, 2.5f * render_theme::kCellSize, 0.001);
     cr_assert_float_eq(center.y, 3.5f * render_theme::kCellSize, 0.001);
 }
+
+// ---------------------------------------------------------------------------
+// shortestWrappedDelta / wrapTileCoord: deplacement toroidal
+// ---------------------------------------------------------------------------
+
+Test(render_theme, shortest_wrapped_delta_direct_move_no_wrap)
+{
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(2.f, 5, 10), 3.f, 0.001);
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(5.f, 2, 10), -3.f, 0.001);
+}
+
+Test(render_theme, shortest_wrapped_delta_goes_the_short_way_around_the_edge)
+{
+    // De la case 0 vers la derniere case (size-1) : le plus court chemin
+    // est -1 (passer par le bord), pas +9 (traverser toute la carte).
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(0.f, 9, 10), -1.f, 0.001);
+    // Symetriquement, de la derniere case vers la case 0 : +1.
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(9.f, 0, 10), 1.f, 0.001);
+}
+
+Test(render_theme, shortest_wrapped_delta_without_map_size_is_raw_delta)
+{
+    cr_assert_float_eq(render_theme::shortestWrappedDelta(0.f, 9, 0), 9.f, 0.001);
+}
+
+Test(render_theme, wrap_tile_coord_brings_negative_and_overflow_back_in_range)
+{
+    cr_assert_float_eq(render_theme::wrapTileCoord(-0.5f, 10), 9.5f, 0.001);
+    cr_assert_float_eq(render_theme::wrapTileCoord(10.5f, 10), 0.5f, 0.001);
+    cr_assert_float_eq(render_theme::wrapTileCoord(4.f, 10), 4.f, 0.001);
+}

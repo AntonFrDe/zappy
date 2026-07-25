@@ -29,6 +29,10 @@ class Renderer
         float _animPhase;
 
         void ensureWindowSize(int mapWidth, int mapHeight);
+        // Rapproche Player::animX/animY de (x, y) d'une fraction de la
+        // distance restante a chaque frame (lissage exponentiel), en
+        // choisissant le chemin le plus court sur la carte toroidale.
+        void updatePlayerAnimations(GameState &state, float dt);
         void drawGrid(int mapWidth, int mapHeight);
         void drawTiles(const GameState &state);
         void drawIncantations(const GameState &state);
