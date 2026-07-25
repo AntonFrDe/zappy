@@ -1,10 +1,18 @@
 #include "NetworkClient.hpp"
 
+#include <algorithm>
+#include <cerrno>
+#include <chrono>
 #include <netdb.h>
 #include <poll.h>
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
+
+namespace {
+constexpr int kHandshakeTimeoutMs = 10000;
+constexpr int kMaxDrainIterationsPerFrame = 64;
+}
 
 NetworkClient::NetworkClient() : _socketFd(-1), _connected(false)
 {
@@ -88,6 +96,31 @@ bool NetworkClient::readAvailable(int waitMs, std::string &errorMsg)
     if (pollResult == 0)
         return true;
 
+    // Le noyau peut lever POLLHUP/POLLERR en meme temps que POLLIN si le
+    // serveur a ferme la connexion juste apres avoir envoye ses derniers
+    // octets (ex: un "seg" final). On draine donc d'abord les donnees
+    // disponibles, et on ne traite l'erreur/le hangup que si recv() ne
+    // rapporte plus rien.
+    if (pfd.revents & POLLIN)
+    {
+        char buffer[4096];
+        ssize_t received = recv(_socketFd, buffer, sizeof(buffer), 0);
+        if (received < 0)
+        {
+            errorMsg = "recv() a echoue";
+            disconnect();
+            return false;
+        }
+        if (received == 0)
+        {
+            errorMsg = "Le serveur a ferme la connexion";
+            disconnect();
+            return false;
+        }
+        _readBuffer.append(buffer, static_cast<std::size_t>(received));
+        return true;
+    }
+
     if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
     {
         errorMsg = "Connexion perdue avec le serveur";
@@ -95,27 +128,13 @@ bool NetworkClient::readAvailable(int waitMs, std::string &errorMsg)
         return false;
     }
 
-    char buffer[4096];
-    ssize_t received = recv(_socketFd, buffer, sizeof(buffer), 0);
-    if (received < 0)
-    {
-        errorMsg = "recv() a echoue";
-        disconnect();
-        return false;
-    }
-    if (received == 0)
-    {
-        errorMsg = "Le serveur a ferme la connexion";
-        disconnect();
-        return false;
-    }
-
-    _readBuffer.append(buffer, static_cast<std::size_t>(received));
     return true;
 }
 
 bool NetworkClient::readLineBlocking(std::string &line, std::string &errorMsg)
 {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kHandshakeTimeoutMs);
+
     while (true)
     {
         std::size_t pos = _readBuffer.find('\n');
@@ -128,9 +147,51 @@ bool NetworkClient::readLineBlocking(std::string &line, std::string &errorMsg)
             return true;
         }
 
-        if (!readAvailable(5000, errorMsg))
+        auto now = std::chrono::steady_clock::now();
+        if (now >= deadline)
+        {
+            errorMsg = "Timeout en attente de donnees du serveur (handshake)";
+            disconnect();
+            return false;
+        }
+        // Le poll ne dure jamais plus d'1s a la fois, pour re-verifier
+        // regulierement l'echeance globale au lieu de la repousser sans
+        // fin comme le faisait un poll() a 5000ms rappele en boucle.
+        auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
+        int waitMs = static_cast<int>(std::min<long long>(remainingMs, 1000));
+        if (!readAvailable(waitMs, errorMsg))
             return false;
     }
+}
+
+namespace {
+
+// send() sur un socket TCP n'est pas tenu d'ecrire tout le buffer d'un
+// coup (partial write) : il faut boucler jusqu'a avoir tout envoye.
+bool sendAll(int fd, const char *data, std::size_t size, std::string &errorMsg)
+{
+    std::size_t totalSent = 0;
+
+    while (totalSent < size)
+    {
+        ssize_t sent = send(fd, data + totalSent, size - totalSent, 0);
+        if (sent < 0)
+        {
+            if (errno == EINTR)
+                continue;
+            errorMsg = "send() a echoue";
+            return false;
+        }
+        if (sent == 0)
+        {
+            errorMsg = "send() n'a pu ecrire aucune donnee";
+            return false;
+        }
+        totalSent += static_cast<std::size_t>(sent);
+    }
+    return true;
+}
+
 }
 
 bool NetworkClient::performHandshake(std::string &errorMsg)
@@ -151,10 +212,8 @@ bool NetworkClient::performHandshake(std::string &errorMsg)
         return false;
     }
     static const std::string kGraphicMessage = "GRAPHIC\n";
-    ssize_t sent = send(_socketFd, kGraphicMessage.c_str(), kGraphicMessage.size(), 0);
-    if (sent < 0 || static_cast<std::size_t>(sent) != kGraphicMessage.size())
+    if (!sendAll(_socketFd, kGraphicMessage.c_str(), kGraphicMessage.size(), errorMsg))
     {
-        errorMsg = "Envoi de GRAPHIC echoue";
         disconnect();
         return false;
     }
@@ -185,6 +244,20 @@ bool NetworkClient::receiveLines(std::vector<std::string> &lines, std::string &e
     lines.clear();
     if (!readAvailable(16, errorMsg))
         return false;
+
+    // Draine le reste des donnees deja disponibles sur le socket (sans
+    // attendre) : un seul recv() de 4096 octets par frame prenait du
+    // retard des qu'une rafale d'evenements plus grosse arrivait (ex:
+    // snapshot initial avec beaucoup de pnw/bct/enw d'un coup).
+    for (int i = 0; i < kMaxDrainIterationsPerFrame; ++i)
+    {
+        std::size_t sizeBefore = _readBuffer.size();
+        if (!readAvailable(0, errorMsg))
+            return false;
+        if (_readBuffer.size() == sizeBefore)
+            break;
+    }
+
     std::size_t start = 0;
     std::size_t pos;
     while ((pos = _readBuffer.find('\n', start)) != std::string::npos)
