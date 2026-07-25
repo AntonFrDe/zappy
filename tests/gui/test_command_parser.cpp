@@ -266,8 +266,26 @@ Test(command_parser, pie_ends_incantation)
     parser.dispatch("pic 1 1 2 #1 #2");
     parser.dispatch("pie 1 1 1");
 
+    // findIncantationAt ne renvoie plus que les incantations actives, mais
+    // celle-ci reste dans la liste (inactive, resultat = succes) le temps
+    // que Renderer joue son animation de resultat.
     cr_assert_null(state.findIncantationAt(1, 1));
-    cr_assert_eq(state.incantations.size(), (size_t)0);
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert_not(state.incantations[0].active);
+    cr_assert_eq(state.incantations[0].result, 1);
+}
+
+Test(command_parser, pie_failure_sets_result_to_zero)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 0");
+
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert_not(state.incantations[0].active);
+    cr_assert_eq(state.incantations[0].result, 0);
 }
 
 // Regression: une incantation terminee et jamais nettoyee ne doit pas
@@ -284,6 +302,38 @@ Test(command_parser, pie_closes_the_new_incantation_not_a_stale_one)
     parser.dispatch("pie 1 1 1");
 
     cr_assert_null(state.findIncantationAt(1, 1));
+}
+
+// ---------------------------------------------------------------------------
+// advanceIncantationAnimations: tient le resultat ~1s avant nettoyage
+// ---------------------------------------------------------------------------
+
+Test(command_parser, finished_incantation_survives_until_hold_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 1");
+
+    state.advanceIncantationAnimations(0.5f);
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+
+    state.advanceIncantationAnimations(0.5f);
+    cr_assert_eq(state.incantations.size(), (size_t)0);
+}
+
+Test(command_parser, active_incantation_is_not_pruned_by_animation_advance)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+
+    state.advanceIncantationAnimations(10.f);
+
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert(state.incantations[0].active);
 }
 
 // ---------------------------------------------------------------------------

@@ -44,6 +44,8 @@ struct Incantation {
     int y = -1;
     int level = 0;
     bool active = false;
+    int result = -1;                 // -1 = en cours, 0 = echec, 1 = succes (connu apres pie)
+    float resultElapsedSeconds = 0.f; // temps ecoule depuis pie, avance par GameState::advanceIncantationAnimations
     std::vector<int> playerIds;
 };
 
@@ -108,11 +110,34 @@ struct GameState {
         return it == eggs.end() ? nullptr : &it->second;
     }
 
+    // Duree (s) pendant laquelle une incantation terminee reste dans l'etat
+    // apres pie, le temps que Renderer joue l'animation de resultat.
+    // Partagee avec Renderer pour normaliser la progression de l'animation.
+    static constexpr float kIncantationResultHoldSeconds = 1.f;
+
+    // Purge les incantations terminees (active=false) dont le resultat est
+    // affiche depuis plus de kIncantationResultHoldSeconds. A appeler une
+    // fois par frame avec le dt ecoule.
+    void advanceIncantationAnimations(float dt)
+    {
+        for (auto it = incantations.begin(); it != incantations.end(); ) {
+            if (!it->active) {
+                it->resultElapsedSeconds += dt;
+                if (it->resultElapsedSeconds >= kIncantationResultHoldSeconds) {
+                    it = incantations.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+    }
+
     // Ne renvoie que l'incantation encore active sur cette case, la plus
     // recente en cas de doublon transitoire (recherche depuis la fin du
-    // vector). Une incantation terminee est retiree de la liste par
-    // CommandParser::handlePie, donc elle ne peut plus etre retrouvee ici
-    // ni faire obstacle a la suivante sur la meme case.
+    // vector). Une incantation terminee (active=false) reste brievement
+    // dans la liste le temps de son animation de resultat (voir
+    // advanceIncantationAnimations), mais n'est plus jamais retrouvee ici :
+    // elle ne peut donc plus faire obstacle a la suivante sur la meme case.
     Incantation *findIncantationAt(int x, int y)
     {
         for (auto it = incantations.rbegin(); it != incantations.rend(); ++it) {

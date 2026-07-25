@@ -330,16 +330,19 @@ void CommandParser::handlePie(std::istringstream &args)
     if (!requireCompleteLine(args, "pie"))
         return;
 
-    // Ferme et retire la plus recente incantation encore active sur cette
-    // case (recherche depuis la fin) : sans ca, une ancienne incantation
-    // deja terminee mais jamais nettoyee restait trouvable en premier et
+    // Ferme la plus recente incantation encore active sur cette case
+    // (recherche depuis la fin) : sans ca, une ancienne incantation deja
+    // terminee mais pas encore nettoyee restait trouvable en premier et
     // "absorbait" le pie destine a la nouvelle, qui restait active a vie.
+    // Elle n'est pas retiree tout de suite : Renderer joue une animation
+    // de succes/echec pendant environ une seconde avant de la nettoyer
+    // (GameState::advanceIncantationAnimations).
     auto rit = std::find_if(_state.incantations.rbegin(), _state.incantations.rend(),
         [x, y](const Incantation &inc) { return inc.x == x && inc.y == y && inc.active; });
     if (rit != _state.incantations.rend())
     {
         rit->active = false;
-        _state.incantations.erase(std::next(rit).base());
+        rit->result = result ? 1 : 0;
     }
 
     std::cout << "[parser] fin d'incantation en (" << x << "," << y << ") -> "
