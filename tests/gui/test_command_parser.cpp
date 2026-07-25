@@ -266,7 +266,24 @@ Test(command_parser, pie_ends_incantation)
     parser.dispatch("pic 1 1 2 #1 #2");
     parser.dispatch("pie 1 1 1");
 
-    cr_assert_not(state.findIncantationAt(1, 1)->active);
+    cr_assert_null(state.findIncantationAt(1, 1));
+    cr_assert_eq(state.incantations.size(), (size_t)0);
+}
+
+// Regression: une incantation terminee et jamais nettoyee ne doit pas
+// "absorber" le pie destine a une nouvelle incantation demarree ensuite
+// sur la meme case (sinon la nouvelle reste active indefiniment).
+Test(command_parser, pie_closes_the_new_incantation_not_a_stale_one)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 0");
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 1");
+
+    cr_assert_null(state.findIncantationAt(1, 1));
 }
 
 // ---------------------------------------------------------------------------

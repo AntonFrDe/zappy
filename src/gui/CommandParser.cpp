@@ -1,4 +1,5 @@
 #include "CommandParser.hpp"
+#include <algorithm>
 #include <iostream>
 
 CommandParser::CommandParser(GameState &state) : _state(state)
@@ -243,9 +244,17 @@ void CommandParser::handlePie(std::istringstream &args)
     int x, y, result;
     args >> x >> y >> result;
 
-    Incantation *incantation = _state.findIncantationAt(x, y);
-    if (incantation)
-        incantation->active = false;
+    // Ferme et retire la plus recente incantation encore active sur cette
+    // case (recherche depuis la fin) : sans ca, une ancienne incantation
+    // deja terminee mais jamais nettoyee restait trouvable en premier et
+    // "absorbait" le pie destine a la nouvelle, qui restait active a vie.
+    auto rit = std::find_if(_state.incantations.rbegin(), _state.incantations.rend(),
+        [x, y](const Incantation &inc) { return inc.x == x && inc.y == y && inc.active; });
+    if (rit != _state.incantations.rend())
+    {
+        rit->active = false;
+        _state.incantations.erase(std::next(rit).base());
+    }
 
     std::cout << "[parser] fin d'incantation en (" << x << "," << y << ") -> "
                << (result ? "succes" : "echec") << std::endl;

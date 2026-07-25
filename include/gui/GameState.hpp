@@ -108,20 +108,25 @@ struct GameState {
         return it == eggs.end() ? nullptr : &it->second;
     }
 
+    // Ne renvoie que l'incantation encore active sur cette case, la plus
+    // recente en cas de doublon transitoire (recherche depuis la fin du
+    // vector). Une incantation terminee est retiree de la liste par
+    // CommandParser::handlePie, donc elle ne peut plus etre retrouvee ici
+    // ni faire obstacle a la suivante sur la meme case.
     Incantation *findIncantationAt(int x, int y)
     {
-        for (auto &incantation : incantations) {
-            if (incantation.x == x && incantation.y == y)
-                return &incantation;
+        for (auto it = incantations.rbegin(); it != incantations.rend(); ++it) {
+            if (it->x == x && it->y == y && it->active)
+                return &(*it);
         }
         return nullptr;
     }
 
     const Incantation *findIncantationAt(int x, int y) const
     {
-        for (const auto &incantation : incantations) {
-            if (incantation.x == x && incantation.y == y)
-                return &incantation;
+        for (auto it = incantations.rbegin(); it != incantations.rend(); ++it) {
+            if (it->x == x && it->y == y && it->active)
+                return &(*it);
         }
         return nullptr;
     }
