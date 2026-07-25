@@ -101,6 +101,14 @@ struct TransientEffect {
     float durationSeconds = 0.6f;
 };
 
+// Message texte a afficher dans la fenetre (smg/pbc/suc/sbp) plutot que
+// seulement dans le terminal (ou l'utilisateur de la GUI ne les voit pas).
+struct LogMessage {
+    std::string text;
+    float elapsedSeconds = 0.f;
+    float durationSeconds = 5.f;
+};
+
 struct GameState {
     int mapWidth = 0;
     int mapHeight = 0;
@@ -113,6 +121,7 @@ struct GameState {
     std::vector<Incantation> incantations;
     std::unordered_map<int, Egg> eggs;
     std::vector<TransientEffect> effects;
+    std::vector<LogMessage> logMessages;
 
     void resizeMap(int width, int height)
     {
@@ -218,6 +227,31 @@ struct GameState {
             it->elapsedSeconds += dt;
             if (it->elapsedSeconds >= it->durationSeconds)
                 it = effects.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    // Nombre max de messages conserves simultanement (evite qu'une rafale
+    // de broadcasts ne fasse deborder indefiniment le panneau, en plus de
+    // la purge par duree dans advanceLogMessages).
+    static constexpr std::size_t kMaxLogMessages = 5;
+
+    void addLogMessage(const std::string &text, float durationSeconds = 5.f)
+    {
+        logMessages.push_back(LogMessage{text, 0.f, durationSeconds});
+        if (logMessages.size() > kMaxLogMessages)
+            logMessages.erase(logMessages.begin());
+    }
+
+    // Purge les messages dont la duree d'affichage est ecoulee. A appeler
+    // une fois par frame avec le dt ecoule.
+    void advanceLogMessages(float dt)
+    {
+        for (auto it = logMessages.begin(); it != logMessages.end(); ) {
+            it->elapsedSeconds += dt;
+            if (it->elapsedSeconds >= it->durationSeconds)
+                it = logMessages.erase(it);
             else
                 ++it;
         }

@@ -61,6 +61,10 @@ class Renderer
         void drawText(const std::string &text, sf::Vector2f pos, unsigned int charSize,
             sf::Color color, bool bold = false);
         void drawHud(const GameState &state);
+        // Messages serveur (smg/pbc/suc/sbp) affiches en bas a gauche de
+        // la carte, coordonnees ecran fixes comme le HUD (voir
+        // GameState::logMessages / addLogMessage).
+        void drawMessageLog(const GameState &state);
         // Rapproche Player::animX/animY de (x, y) d'une fraction de la
         // distance restante a chaque frame (lissage exponentiel), en
         // choisissant le chemin le plus court sur la carte toroidale.

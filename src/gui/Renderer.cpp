@@ -1009,12 +1009,43 @@ void Renderer::drawHud(const GameState &state)
     }
 }
 
+void Renderer::drawMessageLog(const GameState &state)
+{
+    if (!_hasFont || state.logMessages.empty())
+        return;
+
+    sf::Vector2u winSize = _window.getSize();
+    float mapAreaWidth = std::max(1.f, static_cast<float>(winSize.x) - kHudWidth);
+    const float padding = 8.f;
+    const float lineHeight = 16.f;
+    float panelHeight = static_cast<float>(state.logMessages.size()) * lineHeight + padding * 2.f;
+    float panelY = static_cast<float>(winSize.y) - panelHeight - padding;
+
+    sf::RectangleShape panel(sf::Vector2f(mapAreaWidth - padding * 2.f, panelHeight));
+    panel.setPosition(padding, panelY);
+    panel.setFillColor(sf::Color(10, 10, 18, 190));
+    _window.draw(panel);
+
+    float y = panelY + padding;
+    for (const LogMessage &message : state.logMessages) {
+        // S'estompe sur la derniere seconde avant expiration plutot que
+        // de disparaitre d'un coup.
+        float remaining = message.durationSeconds - message.elapsedSeconds;
+        float fadeT = std::min(std::max(remaining, 0.f), 1.f);
+        unsigned char alpha = static_cast<unsigned char>(255.f * fadeT);
+
+        drawText(message.text, sf::Vector2f(padding * 2.f, y), 12, sf::Color(220, 220, 230, alpha));
+        y += lineHeight;
+    }
+}
+
 void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
     state.advanceEggAnimations(dt);
     state.advanceEffects(dt);
+    state.advanceLogMessages(dt);
     updatePlayerAnimations(state, dt);
     ensureWindowSize(state.mapWidth, state.mapHeight);
     updateMapView(state.mapWidth, state.mapHeight);
@@ -1035,6 +1066,7 @@ void Renderer::draw(GameState &state, float dt)
     // par le zoom/pan de la carte.
     _window.setView(_window.getDefaultView());
     drawHud(state);
+    drawMessageLog(state);
     drawGameOverBanner(state);
     _window.display();
 }

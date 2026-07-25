@@ -345,6 +345,7 @@ void CommandParser::handlePbc(std::istringstream &args)
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player)
         _state.addEffect(EffectKind::Broadcast, player->x, player->y, -1, -1, 1.f);
+    _state.addLogMessage("#" + std::to_string(id) + ": " + message);
 
     std::cout << "[parser] broadcast de #" << id << ": " << message << std::endl;
 }
@@ -581,15 +582,18 @@ void CommandParser::handleSmg(std::istringstream &args)
     std::getline(args, message);
     if (!message.empty() && message[0] == ' ')
         message.erase(0, 1);
+    _state.addLogMessage(message);
     std::cout << "[parser] message serveur: " << message << std::endl;
 }
 
 void CommandParser::handleSuc(std::istringstream &)
 {
+    _state.addLogMessage("Commande inconnue (suc)");
     std::cerr << "[parser] le serveur signale une commande inconnue (suc)" << std::endl;
 }
 
 void CommandParser::handleSbp(std::istringstream &)
 {
+    _state.addLogMessage("Mauvais nombre de parametres (sbp)");
     std::cerr << "[parser] le serveur signale un mauvais nombre de parametres (sbp)" << std::endl;
 }

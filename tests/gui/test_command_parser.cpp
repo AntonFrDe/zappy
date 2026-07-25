@@ -255,6 +255,69 @@ Test(command_parser, pbc_adds_broadcast_effect_at_player_position)
 
     cr_assert_eq(state.effects.size(), (size_t)1);
     cr_assert(state.effects[0].kind == EffectKind::Broadcast);
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+    cr_assert_str_eq(state.logMessages[0].text.c_str(), "#1: hello");
+}
+
+// ---------------------------------------------------------------------------
+// smg / suc / sbp: messages serveur affiches dans la fenetre (voir
+// GameState::logMessages), pas seulement dans le terminal
+// ---------------------------------------------------------------------------
+
+Test(command_parser, smg_adds_log_message)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("smg le serveur va fermer");
+
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+    cr_assert_str_eq(state.logMessages[0].text.c_str(), "le serveur va fermer");
+}
+
+Test(command_parser, suc_adds_log_message, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("suc");
+
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+}
+
+Test(command_parser, sbp_adds_log_message, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("sbp");
+
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+}
+
+Test(command_parser, log_messages_are_capped)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    for (int i = 0; i < 10; ++i)
+        parser.dispatch("smg message " + std::to_string(i));
+
+    cr_assert_eq(state.logMessages.size(), GameState::kMaxLogMessages);
+    // Les plus anciens sont retires en premier : le dernier reste "message 9".
+    cr_assert_str_eq(state.logMessages.back().text.c_str(), "message 9");
+}
+
+Test(command_parser, log_messages_expire_after_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("smg hello");
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+
+    state.advanceLogMessages(state.logMessages[0].durationSeconds + 0.1f);
+    cr_assert_eq(state.logMessages.size(), (size_t)0);
 }
 
 Test(command_parser, pfk_adds_egg_laying_effect_at_player_position)
