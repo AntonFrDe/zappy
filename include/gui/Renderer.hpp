@@ -16,7 +16,11 @@ class Renderer
 
         bool isOpen() const;
         void pollEvents();
-        void draw(const GameState &state, float dt);
+        // GameState non-const : le renderer possede l'horloge (dt) et fait
+        // avancer/nettoie lui-meme les animations dont la duree est reelle
+        // (ex: tenir le resultat d'une incantation ~1s avant de la retirer,
+        // voir GameState::advanceIncantationAnimations).
+        void draw(GameState &state, float dt);
 
     private:
         sf::RenderWindow _window;

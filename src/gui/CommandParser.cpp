@@ -1,4 +1,6 @@
 #include "CommandParser.hpp"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 
 CommandParser::CommandParser(GameState &state) : _state(state)
@@ -34,10 +36,17 @@ void CommandParser::registerHandlers()
     _handlers["sbp"] = [this](std::istringstream &str) { handleSbp(str); };
 }
 
+namespace {
+constexpr int kMaxMapDimension = 10000;
+}
+
 int CommandParser::parseId(const std::string &token)
 {
-    if (token.empty() || token[0] != '#')
+    if (token.size() < 2 || token[0] != '#')
         return -1;
+    for (std::size_t i = 1; i < token.size(); ++i)
+        if (!std::isdigit(static_cast<unsigned char>(token[i])))
+            return -1;
     try
     {
         return std::stoi(token.substr(1));
@@ -46,6 +55,31 @@ int CommandParser::parseId(const std::string &token)
     {
         return -1;
     }
+}
+
+bool CommandParser::requireCompleteLine(std::istringstream &args, const char *cmdName)
+{
+    if (args.fail())
+    {
+        std::cerr << "[parser] " << cmdName << ": ligne incomplete ou malformee, ignoree" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool CommandParser::isValidOrientation(int o)
+{
+    return o >= 1 && o <= 4;
+}
+
+bool CommandParser::isValidLevel(int level)
+{
+    return level >= 1 && level <= 8;
+}
+
+bool CommandParser::isInMapBounds(int x, int y) const
+{
+    return x >= 0 && y >= 0 && x < _state.mapWidth && y < _state.mapHeight;
 }
 
 void CommandParser::dispatch(const std::string &line)
@@ -81,6 +115,14 @@ void CommandParser::handleMsz(std::istringstream &args)
 {
     int x, y;
     args >> x >> y;
+    if (!requireCompleteLine(args, "msz"))
+        return;
+    if (x <= 0 || y <= 0 || x > kMaxMapDimension || y > kMaxMapDimension)
+    {
+        std::cerr << "[parser] msz: dimensions de map invalides (" << x << "x" << y << ")" << std::endl;
+        return;
+    }
+
     _state.resizeMap(x, y);
     std::cout << "[parser] map size: " << x << "x" << y << std::endl;
 }
@@ -89,16 +131,27 @@ void CommandParser::handleBct(std::istringstream &args)
 {
     int x, y;
     args >> x >> y;
-
-    if (x < 0 || y < 0 || x >= _state.mapWidth || y >= _state.mapHeight)
+    if (!requireCompleteLine(args, "bct") || !isInMapBounds(x, y))
     {
-        std::cerr << "[parser] bct: coordonnees hors map (" << x << "," << y << ")" << std::endl;
+        std::cerr << "[parser] bct: coordonnees hors map ou ligne invalide" << std::endl;
         return;
     }
 
+    int quantities[RESOURCE_COUNT];
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        args >> quantities[i];
+    if (!requireCompleteLine(args, "bct"))
+        return;
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        if (quantities[i] < 0)
+        {
+            std::cerr << "[parser] bct: quantite negative ignoree" << std::endl;
+            return;
+        }
+
     Tile &tile = _state.tileAt(x, y);
     for (int i = 0; i < RESOURCE_COUNT; ++i)
-        args >> tile.resources[i];
+        tile.resources[i] = quantities[i];
 }
 
 void CommandParser::handleTna(std::istringstream &args)
@@ -120,8 +173,11 @@ void CommandParser::handlePnw(std::istringstream &args)
 
     args >> idToken >> x >> y >> o >> level >> team;
     int id = parseId(idToken);
-    if (id < 0)
+    if (!requireCompleteLine(args, "pnw") || id < 0 || !isValidOrientation(o) || !isValidLevel(level))
+    {
+        std::cerr << "[parser] pnw: ligne invalide ignoree" << std::endl;
         return;
+    }
 
     Player player;
     player.id = id;
@@ -148,7 +204,13 @@ void CommandParser::handlePpo(std::istringstream &args)
 
     args >> idToken >> x >> y >> o;
     int id = parseId(idToken);
-    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (!requireCompleteLine(args, "ppo") || id < 0 || !isValidOrientation(o))
+    {
+        std::cerr << "[parser] ppo: ligne invalide ignoree" << std::endl;
+        return;
+    }
+
+    Player *player = _state.findPlayer(id);
     if (!player)
     {
         std::cerr << "[parser] ppo: joueur #" << id << " inconnu" << std::endl;
@@ -167,7 +229,10 @@ void CommandParser::handlePlv(std::istringstream &args)
 
     args >> idToken >> level;
     int id = parseId(idToken);
-    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (!requireCompleteLine(args, "plv") || id < 0 || !isValidLevel(level))
+        return;
+
+    Player *player = _state.findPlayer(id);
     if (!player)
         return;
 
@@ -181,14 +246,29 @@ void CommandParser::handlePin(std::istringstream &args)
 
     args >> idToken >> x >> y;
     int id = parseId(idToken);
-    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (id < 0)
+        return;
+
+    int quantities[RESOURCE_COUNT];
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        args >> quantities[i];
+    if (!requireCompleteLine(args, "pin"))
+        return;
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        if (quantities[i] < 0)
+        {
+            std::cerr << "[parser] pin: quantite negative ignoree" << std::endl;
+            return;
+        }
+
+    Player *player = _state.findPlayer(id);
     if (!player)
         return;
 
     player->x = x;
     player->y = y;
     for (int i = 0; i < RESOURCE_COUNT; ++i)
-        args >> player->inventory[i];
+        player->inventory[i] = quantities[i];
 }
 
 void CommandParser::handlePex(std::istringstream &args)
@@ -217,6 +297,11 @@ void CommandParser::handlePic(std::istringstream &args)
 {
     int x, y, level;
     args >> x >> y >> level;
+    if (!requireCompleteLine(args, "pic") || !isValidLevel(level))
+    {
+        std::cerr << "[parser] pic: ligne invalide ignoree" << std::endl;
+        return;
+    }
 
     Incantation incantation;
     incantation.x = x;
@@ -242,10 +327,23 @@ void CommandParser::handlePie(std::istringstream &args)
 {
     int x, y, result;
     args >> x >> y >> result;
+    if (!requireCompleteLine(args, "pie"))
+        return;
 
-    Incantation *incantation = _state.findIncantationAt(x, y);
-    if (incantation)
-        incantation->active = false;
+    // Ferme la plus recente incantation encore active sur cette case
+    // (recherche depuis la fin) : sans ca, une ancienne incantation deja
+    // terminee mais pas encore nettoyee restait trouvable en premier et
+    // "absorbait" le pie destine a la nouvelle, qui restait active a vie.
+    // Elle n'est pas retiree tout de suite : Renderer joue une animation
+    // de succes/echec pendant environ une seconde avant de la nettoyer
+    // (GameState::advanceIncantationAnimations).
+    auto rit = std::find_if(_state.incantations.rbegin(), _state.incantations.rend(),
+        [x, y](const Incantation &inc) { return inc.x == x && inc.y == y && inc.active; });
+    if (rit != _state.incantations.rend())
+    {
+        rit->active = false;
+        rit->result = result ? 1 : 0;
+    }
 
     std::cout << "[parser] fin d'incantation en (" << x << "," << y << ") -> "
                << (result ? "succes" : "echec") << std::endl;
@@ -263,6 +361,8 @@ void CommandParser::handlePdr(std::istringstream &args)
     std::string idToken;
     int resourceIndex;
     args >> idToken >> resourceIndex;
+    if (!requireCompleteLine(args, "pdr"))
+        return;
 
     int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
@@ -270,7 +370,7 @@ void CommandParser::handlePdr(std::istringstream &args)
     {
         if (player->inventory[resourceIndex] > 0)
             player->inventory[resourceIndex]--;
-        if (player->x >= 0 && player->y >= 0 && player->x < _state.mapWidth && player->y < _state.mapHeight)
+        if (isInMapBounds(player->x, player->y))
             _state.tileAt(player->x, player->y).resources[resourceIndex]++;
     }
 }
@@ -280,13 +380,15 @@ void CommandParser::handlePgt(std::istringstream &args)
     std::string idToken;
     int resourceIndex;
     args >> idToken >> resourceIndex;
+    if (!requireCompleteLine(args, "pgt"))
+        return;
 
     int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player && resourceIndex >= 0 && resourceIndex < RESOURCE_COUNT)
     {
         player->inventory[resourceIndex]++;
-        if (player->x >= 0 && player->y >= 0 && player->x < _state.mapWidth && player->y < _state.mapHeight)
+        if (isInMapBounds(player->x, player->y))
         {
             Tile &tile = _state.tileAt(player->x, player->y);
             if (tile.resources[resourceIndex] > 0)
@@ -313,6 +415,8 @@ void CommandParser::handleEnw(std::istringstream &args)
     int x, y;
 
     args >> eggIdToken >> playerIdToken >> x >> y;
+    if (!requireCompleteLine(args, "enw"))
+        return;
     int eggId = parseId(eggIdToken);
     int playerId = parseId(playerIdToken);
     if (eggId < 0)
@@ -362,6 +466,8 @@ void CommandParser::handleSgt(std::istringstream &args)
 {
     int t;
     args >> t;
+    if (!requireCompleteLine(args, "sgt") || t <= 0)
+        return;
     _state.timeUnit = t;
     std::cout << "[parser] time unit: " << t << std::endl;
 }
@@ -370,6 +476,8 @@ void CommandParser::handleSst(std::istringstream &args)
 {
     int t;
     args >> t;
+    if (!requireCompleteLine(args, "sst") || t <= 0)
+        return;
     _state.timeUnit = t;
     std::cout << "[parser] time unit modifie: " << t << std::endl;
 }

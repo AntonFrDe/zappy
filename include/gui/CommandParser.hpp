@@ -45,4 +45,13 @@ class CommandParser
         void handleSuc(std::istringstream &args);   // suc
         void handleSbp(std::istringstream &args);   // sbp
         static int parseId(const std::string &token);
+
+        // Rejette une ligne dont il manque des parametres (stream en echec
+        // apres extraction) ou qui contient des donnees en trop : sans ca,
+        // les entiers lus restent non initialises et sont quand meme
+        // utilises (resize de map, indexation de tableau...).
+        bool requireCompleteLine(std::istringstream &args, const char *cmdName);
+        static bool isValidOrientation(int o);
+        static bool isValidLevel(int level);
+        bool isInMapBounds(int x, int y) const;
 };

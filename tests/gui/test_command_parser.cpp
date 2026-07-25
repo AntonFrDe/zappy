@@ -266,7 +266,74 @@ Test(command_parser, pie_ends_incantation)
     parser.dispatch("pic 1 1 2 #1 #2");
     parser.dispatch("pie 1 1 1");
 
-    cr_assert_not(state.findIncantationAt(1, 1)->active);
+    // findIncantationAt ne renvoie plus que les incantations actives, mais
+    // celle-ci reste dans la liste (inactive, resultat = succes) le temps
+    // que Renderer joue son animation de resultat.
+    cr_assert_null(state.findIncantationAt(1, 1));
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert_not(state.incantations[0].active);
+    cr_assert_eq(state.incantations[0].result, 1);
+}
+
+Test(command_parser, pie_failure_sets_result_to_zero)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 0");
+
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert_not(state.incantations[0].active);
+    cr_assert_eq(state.incantations[0].result, 0);
+}
+
+// Regression: une incantation terminee et jamais nettoyee ne doit pas
+// "absorber" le pie destine a une nouvelle incantation demarree ensuite
+// sur la meme case (sinon la nouvelle reste active indefiniment).
+Test(command_parser, pie_closes_the_new_incantation_not_a_stale_one)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 0");
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 1");
+
+    cr_assert_null(state.findIncantationAt(1, 1));
+}
+
+// ---------------------------------------------------------------------------
+// advanceIncantationAnimations: tient le resultat ~1s avant nettoyage
+// ---------------------------------------------------------------------------
+
+Test(command_parser, finished_incantation_survives_until_hold_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 1");
+
+    state.advanceIncantationAnimations(0.5f);
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+
+    state.advanceIncantationAnimations(0.5f);
+    cr_assert_eq(state.incantations.size(), (size_t)0);
+}
+
+Test(command_parser, active_incantation_is_not_pruned_by_animation_advance)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+
+    state.advanceIncantationAnimations(10.f);
+
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert(state.incantations[0].active);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,14 +447,71 @@ Test(command_parser, missing_arguments_do_not_crash, .init = redirect_all_std)
     GameState state;
     CommandParser parser(state);
 
-    // idToken reste vide quand le flux est a court d'arguments, donc
-    // parseId() rejette la commande avant toute lecture des entiers
-    // non initialises (x, y, o, ...). "msz" est volontairement exclu :
-    // resizeMap() consommerait directement des int non initialises.
+    // requireCompleteLine() rejette toute ligne dont l'extraction des
+    // entiers a echoue avant qu'ils soient utilises (resize de map,
+    // indexation de tableau, etc.).
+    parser.dispatch("msz");
+    parser.dispatch("bct");
     parser.dispatch("pnw");
     parser.dispatch("ppo");
     parser.dispatch("plv");
-    parser.dispatch("bct");
+    parser.dispatch("pin");
+    parser.dispatch("pic");
+    parser.dispatch("pie");
+    parser.dispatch("enw");
+    parser.dispatch("sgt");
+    parser.dispatch("sst");
 
-    cr_assert(true);
+    cr_assert_eq(state.mapWidth, 0);
+    cr_assert_eq(state.mapHeight, 0);
+}
+
+Test(command_parser, msz_rejects_non_positive_or_absurd_dimensions, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("msz 0 5");
+    cr_assert_eq(state.mapWidth, 0);
+
+    parser.dispatch("msz -3 5");
+    cr_assert_eq(state.mapWidth, 0);
+
+    parser.dispatch("msz 999999999 5");
+    cr_assert_eq(state.mapWidth, 0);
+
+    parser.dispatch("msz 10 8");
+    cr_assert_eq(state.mapWidth, 10);
+    cr_assert_eq(state.mapHeight, 8);
+}
+
+Test(command_parser, pnw_rejects_invalid_orientation_or_level, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 0 0 0 1 rouge");
+    cr_assert_null(state.findPlayer(1));
+
+    parser.dispatch("pnw #1 0 0 5 1 rouge");
+    cr_assert_null(state.findPlayer(1));
+
+    parser.dispatch("pnw #1 0 0 1 9 rouge");
+    cr_assert_null(state.findPlayer(1));
+
+    parser.dispatch("pnw #1 0 0 1 8 rouge");
+    cr_assert_not_null(state.findPlayer(1));
+}
+
+Test(command_parser, bct_rejects_negative_quantities, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("msz 3 3");
+    parser.dispatch("bct 1 1 -1 0 0 0 0 0 0");
+
+    Tile &tile = state.tileAt(1, 1);
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        cr_assert_eq(tile.resources[i], 0);
 }

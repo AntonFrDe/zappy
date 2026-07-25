@@ -40,6 +40,134 @@ void drawGlow(sf::RenderWindow &window, sf::Vector2f center, float maxRadius,
     }
 }
 
+// Range "level" petits carres cote a cote, centres sur "topCenter" : sert
+// d'indicateur du niveau vise par une incantation (evite de dependre d'une
+// police/sf::Font, absente du projet pour l'instant).
+void drawLevelPips(sf::RenderWindow &window, sf::Vector2f topCenter, int level, unsigned char alpha)
+{
+    constexpr float kPipSize = 4.f;
+    constexpr float kPipGap = 3.f;
+    float totalWidth = level * kPipSize + (level - 1) * kPipGap;
+    float startX = topCenter.x - totalWidth / 2.f;
+
+    for (int i = 0; i < level; ++i) {
+        sf::RectangleShape pip(sf::Vector2f(kPipSize, kPipSize));
+        pip.setFillColor(sf::Color(255, 216, 10, alpha));
+        pip.setPosition(startX + i * (kPipSize + kPipGap), topCenter.y);
+        window.draw(pip);
+    }
+}
+
+// Anneau rituel : cercle pointille tournant + particules en orbite, joue
+// pendant toute la duree de l'incantation (jusqu'a reception de pie).
+void drawRitualCircle(sf::RenderWindow &window, sf::Vector2f center, float animPhase)
+{
+    constexpr int kParticleCount = 8;
+    float ringRadius = render_theme::kCellSize * 0.46f;
+
+    sf::CircleShape ring(ringRadius);
+    ring.setFillColor(sf::Color::Transparent);
+    ring.setOutlineThickness(2.f);
+    ring.setOutlineColor(sf::Color(255, 216, 10, 150));
+    ring.setOrigin(ring.getRadius(), ring.getRadius());
+    ring.setPosition(center);
+    window.draw(ring);
+
+    float rotationDeg = animPhase * 90.f;
+    for (int i = 0; i < kParticleCount; ++i) {
+        float angleDeg = rotationDeg + i * (360.f / kParticleCount);
+        float rad = angleDeg * kPi / 180.f;
+        sf::Vector2f pos(center.x + std::cos(rad) * ringRadius, center.y + std::sin(rad) * ringRadius);
+
+        sf::CircleShape particle(2.4f);
+        particle.setFillColor(sf::Color(255, 216, 10, 230));
+        particle.setOrigin(particle.getRadius(), particle.getRadius());
+        particle.setPosition(pos);
+        window.draw(particle);
+    }
+}
+
+// Halo distinct (couleur d'equipe) pour chaque participant a l'incantation,
+// reparti en petit cercle autour du centre de la case pour rester lisibles
+// meme si les joueurs eux-memes sont dessines superposes sur cette case.
+void drawParticipantHalos(sf::RenderWindow &window, sf::Vector2f center,
+    const GameState &state, const std::vector<int> &playerIds, float animPhase)
+{
+    if (playerIds.empty())
+        return;
+
+    float radius = render_theme::kCellSize * 0.22f;
+    int count = static_cast<int>(playerIds.size());
+
+    for (int i = 0; i < count; ++i) {
+        float angleDeg = i * (360.f / count) - 90.f;
+        float rad = angleDeg * kPi / 180.f;
+        sf::Vector2f pos(center.x + std::cos(rad) * radius, center.y + std::sin(rad) * radius);
+
+        const Player *player = state.findPlayer(playerIds[i]);
+        render_theme::RgbColor color = player ? render_theme::teamColor(player->team)
+                                               : render_theme::RgbColor{255, 255, 255};
+        float pulse = 0.6f + 0.4f * std::sin(animPhase * 5.f + static_cast<float>(i));
+
+        sf::CircleShape halo(6.f * pulse);
+        halo.setFillColor(sf::Color::Transparent);
+        halo.setOutlineThickness(1.5f);
+        halo.setOutlineColor(sf::Color(color.r, color.g, color.b, 210));
+        halo.setOrigin(halo.getRadius(), halo.getRadius());
+        halo.setPosition(pos);
+        window.draw(halo);
+    }
+}
+
+// Resultat "succes" : explosion vert/dore qui s'agrandit en s'estompant sur
+// GameState::kIncantationResultHoldSeconds, plus le niveau atteint affiche.
+void drawIncantationSuccess(sf::RenderWindow &window, sf::Vector2f center, float t, int reachedLevel)
+{
+    unsigned char alpha = static_cast<unsigned char>(255.f * (1.f - t));
+    float radius = render_theme::kCellSize * (0.3f + 0.9f * t);
+
+    sf::CircleShape burstOuter(radius);
+    burstOuter.setFillColor(sf::Color::Transparent);
+    burstOuter.setOutlineThickness(3.f);
+    burstOuter.setOutlineColor(sf::Color(120, 255, 140, alpha));
+    burstOuter.setOrigin(burstOuter.getRadius(), burstOuter.getRadius());
+    burstOuter.setPosition(center);
+    window.draw(burstOuter);
+
+    sf::CircleShape burstInner(radius * 0.6f);
+    burstInner.setFillColor(sf::Color::Transparent);
+    burstInner.setOutlineThickness(2.f);
+    burstInner.setOutlineColor(sf::Color(255, 216, 10, alpha));
+    burstInner.setOrigin(burstInner.getRadius(), burstInner.getRadius());
+    burstInner.setPosition(center);
+    window.draw(burstInner);
+
+    float riseOffset = t * render_theme::kCellSize * 0.5f;
+    sf::Vector2f pipsPos(center.x, center.y - render_theme::kCellSize * 0.62f - riseOffset);
+    drawLevelPips(window, pipsPos, reachedLevel, alpha);
+}
+
+// Resultat "echec" : flash rouge qui s'estompe puis disparait sur
+// GameState::kIncantationResultHoldSeconds.
+void drawIncantationFailure(sf::RenderWindow &window, sf::Vector2f center, float t)
+{
+    unsigned char alpha = static_cast<unsigned char>(200.f * (1.f - t));
+
+    sf::CircleShape flash(render_theme::kCellSize * 0.55f);
+    flash.setFillColor(sf::Color(220, 40, 40, alpha));
+    flash.setOrigin(flash.getRadius(), flash.getRadius());
+    flash.setPosition(center);
+    window.draw(flash);
+
+    sf::CircleShape ring(render_theme::kCellSize * (0.3f + 0.5f * t));
+    ring.setFillColor(sf::Color::Transparent);
+    ring.setOutlineThickness(2.f);
+    ring.setOutlineColor(sf::Color(255, 80, 80, alpha));
+    ring.setOrigin(ring.getRadius(), ring.getRadius());
+    ring.setPosition(center);
+    window.draw(ring);
+}
+
 // Silhouette de Pac-Man : un disque plein auquel il manque un coin,
 // echantillonne de mouthHalfAngleDeg a (360 - mouthHalfAngleDeg). Tourne
 // vers la droite (angle 0) par defaut ; setRotation() l'oriente ensuite.
@@ -213,15 +341,31 @@ void Renderer::drawTiles(const GameState &state)
 void Renderer::drawIncantations(const GameState &state)
 {
     for (const Incantation &incantation : state.incantations) {
-        if (!incantation.active)
-            continue;
-
         render_theme::PixelPos center = render_theme::tileCenterPx(incantation.x, incantation.y);
-        float pulse = 0.5f + 0.5f * std::sin(_animPhase * 6.f);
-        unsigned char peak = static_cast<unsigned char>(110 + 80 * pulse);
+        sf::Vector2f centerVec = toSfVec(center);
 
-        drawGlow(_window, toSfVec(center), render_theme::kCellSize * 0.6f,
-            sf::Color(255, 216, 10), peak);
+        if (incantation.active) {
+            float pulse = 0.5f + 0.5f * std::sin(_animPhase * 6.f);
+            unsigned char peak = static_cast<unsigned char>(110 + 80 * pulse);
+
+            drawGlow(_window, centerVec, render_theme::kCellSize * 0.6f, sf::Color(255, 216, 10), peak);
+            drawRitualCircle(_window, centerVec, _animPhase);
+            drawParticipantHalos(_window, centerVec, state, incantation.playerIds, _animPhase);
+            drawLevelPips(_window, sf::Vector2f(centerVec.x, centerVec.y - render_theme::kCellSize * 0.62f),
+                incantation.level, 255);
+            continue;
+        }
+
+        // Incantation terminee : le resultat reste affiche pendant
+        // GameState::kIncantationResultHoldSeconds (voir
+        // GameState::advanceIncantationAnimations pour le nettoyage).
+        float t = incantation.resultElapsedSeconds / GameState::kIncantationResultHoldSeconds;
+        t = std::min(std::max(t, 0.f), 1.f);
+
+        if (incantation.result == 1)
+            drawIncantationSuccess(_window, centerVec, t, incantation.level);
+        else
+            drawIncantationFailure(_window, centerVec, t);
     }
 }
 
@@ -296,9 +440,10 @@ void Renderer::drawPlayers(const GameState &state)
     }
 }
 
-void Renderer::draw(const GameState &state, float dt)
+void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
+    state.advanceIncantationAnimations(dt);
     ensureWindowSize(state.mapWidth, state.mapHeight);
 
     _window.clear(sf::Color::Black);

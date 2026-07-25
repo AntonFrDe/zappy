@@ -59,13 +59,13 @@ RgbColor resourceColor(int resourceIndex)
 float orientationAngleDeg(int orientation)
 {
     switch (orientation) {
-    case 1:
-        return 0.f;   // East
     case 2:
-        return 90.f;  // South
+        return 0.f;   // East
     case 3:
+        return 90.f;  // South
+    case 4:
         return 180.f; // West
-    case 0:
+    case 1:
     default:
         return 270.f; // North
     }
