@@ -65,15 +65,15 @@ Test(render_theme, each_resource_has_a_distinct_color)
 }
 
 // ---------------------------------------------------------------------------
-// orientationAngleDeg: North=0, East=1, South=2, West=3
+// orientationAngleDeg: protocole reseau North=1, East=2, South=3, West=4
 // ---------------------------------------------------------------------------
 
 Test(render_theme, orientation_angle_matches_each_direction)
 {
-    cr_assert_float_eq(render_theme::orientationAngleDeg(0), 270.f, 0.001);
-    cr_assert_float_eq(render_theme::orientationAngleDeg(1), 0.f, 0.001);
-    cr_assert_float_eq(render_theme::orientationAngleDeg(2), 90.f, 0.001);
-    cr_assert_float_eq(render_theme::orientationAngleDeg(3), 180.f, 0.001);
+    cr_assert_float_eq(render_theme::orientationAngleDeg(1), 270.f, 0.001);
+    cr_assert_float_eq(render_theme::orientationAngleDeg(2), 0.f, 0.001);
+    cr_assert_float_eq(render_theme::orientationAngleDeg(3), 90.f, 0.001);
+    cr_assert_float_eq(render_theme::orientationAngleDeg(4), 180.f, 0.001);
 }
 
 // ---------------------------------------------------------------------------

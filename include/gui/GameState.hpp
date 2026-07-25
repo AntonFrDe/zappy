@@ -8,11 +8,14 @@
 
 constexpr int RESOURCE_COUNT = 7;
 
+// Aligne sur le protocole reseau du serveur (1=N, 2=E, 3=S, 4=W), voir
+// include/server/map.h::direction_t. Ne pas repartir de 0 : le rendu
+// (RenderTheme::orientationAngleDeg) attend directement ces valeurs.
 enum class Orientation {
-    North = 0,
-    East = 1,
-    South = 2,
-    West = 3,
+    North = 1,
+    East = 2,
+    South = 3,
+    West = 4,
 };
 
 struct Tile {
