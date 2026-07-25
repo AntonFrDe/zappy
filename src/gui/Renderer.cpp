@@ -324,6 +324,7 @@ Renderer::Renderer(int initialMapWidth, int initialMapHeight)
       _selectedTileY(-1)
 {
     _window.setVerticalSyncEnabled(true);
+    rebuildGridCache(initialMapWidth, initialMapHeight);
 }
 
 bool Renderer::isOpen() const
@@ -388,6 +389,31 @@ void Renderer::ensureWindowSize(int mapWidth, int mapHeight)
     // que de garder le zoom/pan de la carte precedente.
     _zoomLevel = 1.f;
     _panOffset = sf::Vector2f(0.f, 0.f);
+    rebuildGridCache(mapWidth, mapHeight);
+}
+
+void Renderer::rebuildGridCache(int mapWidth, int mapHeight)
+{
+    mapWidth = std::max(mapWidth, 1);
+    mapHeight = std::max(mapHeight, 1);
+
+    float width = static_cast<float>(mapWidth) * render_theme::kCellSize;
+    float height = static_cast<float>(mapHeight) * render_theme::kCellSize;
+    sf::Color lineColor(30, 34, 84);
+
+    _gridVertices.setPrimitiveType(sf::Lines);
+    _gridVertices.clear();
+
+    for (int x = 0; x <= mapWidth; ++x) {
+        float px = static_cast<float>(x) * render_theme::kCellSize;
+        _gridVertices.append(sf::Vertex(sf::Vector2f(px, 0.f), lineColor));
+        _gridVertices.append(sf::Vertex(sf::Vector2f(px, height), lineColor));
+    }
+    for (int y = 0; y <= mapHeight; ++y) {
+        float py = static_cast<float>(y) * render_theme::kCellSize;
+        _gridVertices.append(sf::Vertex(sf::Vector2f(0.f, py), lineColor));
+        _gridVertices.append(sf::Vertex(sf::Vector2f(width, py), lineColor));
+    }
 }
 
 void Renderer::updateMapView(int mapWidth, int mapHeight)
@@ -419,30 +445,33 @@ void Renderer::updateMapView(int mapWidth, int mapHeight)
     _mapView.setCenter(mapPxWidth / 2.f + _panOffset.x, mapPxHeight / 2.f + _panOffset.y);
 }
 
-void Renderer::drawGrid(int mapWidth, int mapHeight)
+void Renderer::drawGrid()
 {
-    sf::RectangleShape line;
-    line.setFillColor(sf::Color(30, 34, 84));
-
-    float width = static_cast<float>(mapWidth) * render_theme::kCellSize;
-    float height = static_cast<float>(mapHeight) * render_theme::kCellSize;
-
-    for (int x = 0; x <= mapWidth; ++x) {
-        line.setSize(sf::Vector2f(1.f, height));
-        line.setPosition(x * render_theme::kCellSize, 0.f);
-        _window.draw(line);
-    }
-    for (int y = 0; y <= mapHeight; ++y) {
-        line.setSize(sf::Vector2f(width, 1.f));
-        line.setPosition(0.f, y * render_theme::kCellSize);
-        _window.draw(line);
-    }
+    // Contenu mis en cache dans _gridVertices par rebuildGridCache() : un
+    // seul draw() ici, plutot que 2*(mapWidth+mapHeight+2) formes
+    // recreees a chaque frame (cf. rebuildGridCache).
+    _window.draw(_gridVertices);
 }
 
 void Renderer::drawTiles(const GameState &state)
 {
-    for (int y = 0; y < state.mapHeight; ++y) {
-        for (int x = 0; x < state.mapWidth; ++x) {
+    // Ne parcourt que les tuiles dans le champ de la camera (+1 tuile de
+    // marge) plutot que toute la carte : sans effet a l'echelle par
+    // defaut (carte entiere visible), mais evite de reconstruire des
+    // formes pour des tuiles hors champ des qu'on zoome sur une grande
+    // carte.
+    float viewLeft = _mapView.getCenter().x - _mapView.getSize().x / 2.f;
+    float viewTop = _mapView.getCenter().y - _mapView.getSize().y / 2.f;
+    float viewRight = viewLeft + _mapView.getSize().x;
+    float viewBottom = viewTop + _mapView.getSize().y;
+
+    int minX = std::max(0, static_cast<int>(std::floor(viewLeft / render_theme::kCellSize)) - 1);
+    int minY = std::max(0, static_cast<int>(std::floor(viewTop / render_theme::kCellSize)) - 1);
+    int maxX = std::min(state.mapWidth - 1, static_cast<int>(std::ceil(viewRight / render_theme::kCellSize)) + 1);
+    int maxY = std::min(state.mapHeight - 1, static_cast<int>(std::ceil(viewBottom / render_theme::kCellSize)) + 1);
+
+    for (int y = minY; y <= maxY; ++y) {
+        for (int x = minX; x <= maxX; ++x) {
             const Tile &tile = state.tileAt(x, y);
             render_theme::PixelPos center = render_theme::tileCenterPx(x, y);
 
@@ -1055,7 +1084,7 @@ void Renderer::draw(GameState &state, float dt)
 
     // Zone carte : passe par la camera (zoom/pan/letterbox).
     _window.setView(_mapView);
-    drawGrid(state.mapWidth, state.mapHeight);
+    drawGrid();
     drawTiles(state);
     drawIncantations(state);
     drawEggs(state);

@@ -31,6 +31,14 @@ class Renderer
         sf::Font _font;
         bool _hasFont;
 
+        // Grille mise en cache (un seul sf::VertexArray, un seul draw())
+        // au lieu de recreer 2*(mapWidth+mapHeight+2) sf::RectangleShape a
+        // chaque frame : sur une grande carte, ca finissait par couter
+        // cher pour un contenu qui ne change jamais entre deux redimen-
+        // sionnements de carte. Reconstruite dans ensureWindowSize(),
+        // uniquement quand mapWidth/mapHeight changent reellement.
+        sf::VertexArray _gridVertices;
+
         // Camera de la zone carte (zoom + deplacement), separee de la vue
         // par defaut utilisee pour le HUD : le panneau HUD reste fixe a
         // l'ecran quel que soit le zoom/pan applique a la carte. Recalculee
@@ -53,6 +61,7 @@ class Renderer
         int _selectedTileY;
 
         void ensureWindowSize(int mapWidth, int mapHeight);
+        void rebuildGridCache(int mapWidth, int mapHeight);
         // Recalcule _mapView : viewport letterboxe (garde le ratio
         // d'aspect de la carte au lieu de l'etirer) dans la zone a gauche
         // du HUD, taille visible selon _zoomLevel, centre selon _panOffset.
@@ -69,7 +78,7 @@ class Renderer
         // distance restante a chaque frame (lissage exponentiel), en
         // choisissant le chemin le plus court sur la carte toroidale.
         void updatePlayerAnimations(GameState &state, float dt);
-        void drawGrid(int mapWidth, int mapHeight);
+        void drawGrid();
         void drawTiles(const GameState &state);
         void drawIncantations(const GameState &state);
         void drawEggs(const GameState &state);
