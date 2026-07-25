@@ -21,6 +21,16 @@ sf::Vector2f toSfVec(render_theme::PixelPos p)
     return sf::Vector2f(p.x, p.y);
 }
 
+// Couleur d'equipe sans collision : passe par Team::colorIndex (ordre
+// d'apparition, voir CommandParser::handleTna) quand l'equipe est connue,
+// et ne retombe sur le hash du nom (qui peut entrer en collision au-dela
+// de 8 equipes) que dans le cas defensif ou elle ne l'est pas encore.
+render_theme::RgbColor teamColorFor(const GameState &state, const std::string &teamName)
+{
+    const Team *team = state.findTeam(teamName);
+    return team ? render_theme::teamColorByIndex(team->colorIndex) : render_theme::teamColor(teamName);
+}
+
 // Simule un vrai degrade (SFML n'a pas de radial gradient natif) en
 // empilant plusieurs cercles semi-transparents, du plus grand/plus pale
 // au plus petit/plus intense - un halo "neon" plutot qu'un disque plat.
@@ -107,7 +117,7 @@ void drawParticipantHalos(sf::RenderWindow &window, sf::Vector2f center,
         sf::Vector2f pos(center.x + std::cos(rad) * radius, center.y + std::sin(rad) * radius);
 
         const Player *player = state.findPlayer(playerIds[i]);
-        render_theme::RgbColor color = player ? render_theme::teamColor(player->team)
+        render_theme::RgbColor color = player ? teamColorFor(state, player->team)
                                                : render_theme::RgbColor{255, 255, 255};
         float pulse = 0.6f + 0.4f * std::sin(animPhase * 5.f + static_cast<float>(i));
 
@@ -314,6 +324,7 @@ Renderer::Renderer(int initialMapWidth, int initialMapHeight)
       _selectedTileY(-1)
 {
     _window.setVerticalSyncEnabled(true);
+    rebuildGridCache(initialMapWidth, initialMapHeight);
 }
 
 bool Renderer::isOpen() const
@@ -378,6 +389,31 @@ void Renderer::ensureWindowSize(int mapWidth, int mapHeight)
     // que de garder le zoom/pan de la carte precedente.
     _zoomLevel = 1.f;
     _panOffset = sf::Vector2f(0.f, 0.f);
+    rebuildGridCache(mapWidth, mapHeight);
+}
+
+void Renderer::rebuildGridCache(int mapWidth, int mapHeight)
+{
+    mapWidth = std::max(mapWidth, 1);
+    mapHeight = std::max(mapHeight, 1);
+
+    float width = static_cast<float>(mapWidth) * render_theme::kCellSize;
+    float height = static_cast<float>(mapHeight) * render_theme::kCellSize;
+    sf::Color lineColor(30, 34, 84);
+
+    _gridVertices.setPrimitiveType(sf::Lines);
+    _gridVertices.clear();
+
+    for (int x = 0; x <= mapWidth; ++x) {
+        float px = static_cast<float>(x) * render_theme::kCellSize;
+        _gridVertices.append(sf::Vertex(sf::Vector2f(px, 0.f), lineColor));
+        _gridVertices.append(sf::Vertex(sf::Vector2f(px, height), lineColor));
+    }
+    for (int y = 0; y <= mapHeight; ++y) {
+        float py = static_cast<float>(y) * render_theme::kCellSize;
+        _gridVertices.append(sf::Vertex(sf::Vector2f(0.f, py), lineColor));
+        _gridVertices.append(sf::Vertex(sf::Vector2f(width, py), lineColor));
+    }
 }
 
 void Renderer::updateMapView(int mapWidth, int mapHeight)
@@ -409,30 +445,33 @@ void Renderer::updateMapView(int mapWidth, int mapHeight)
     _mapView.setCenter(mapPxWidth / 2.f + _panOffset.x, mapPxHeight / 2.f + _panOffset.y);
 }
 
-void Renderer::drawGrid(int mapWidth, int mapHeight)
+void Renderer::drawGrid()
 {
-    sf::RectangleShape line;
-    line.setFillColor(sf::Color(30, 34, 84));
-
-    float width = static_cast<float>(mapWidth) * render_theme::kCellSize;
-    float height = static_cast<float>(mapHeight) * render_theme::kCellSize;
-
-    for (int x = 0; x <= mapWidth; ++x) {
-        line.setSize(sf::Vector2f(1.f, height));
-        line.setPosition(x * render_theme::kCellSize, 0.f);
-        _window.draw(line);
-    }
-    for (int y = 0; y <= mapHeight; ++y) {
-        line.setSize(sf::Vector2f(width, 1.f));
-        line.setPosition(0.f, y * render_theme::kCellSize);
-        _window.draw(line);
-    }
+    // Contenu mis en cache dans _gridVertices par rebuildGridCache() : un
+    // seul draw() ici, plutot que 2*(mapWidth+mapHeight+2) formes
+    // recreees a chaque frame (cf. rebuildGridCache).
+    _window.draw(_gridVertices);
 }
 
 void Renderer::drawTiles(const GameState &state)
 {
-    for (int y = 0; y < state.mapHeight; ++y) {
-        for (int x = 0; x < state.mapWidth; ++x) {
+    // Ne parcourt que les tuiles dans le champ de la camera (+1 tuile de
+    // marge) plutot que toute la carte : sans effet a l'echelle par
+    // defaut (carte entiere visible), mais evite de reconstruire des
+    // formes pour des tuiles hors champ des qu'on zoome sur une grande
+    // carte.
+    float viewLeft = _mapView.getCenter().x - _mapView.getSize().x / 2.f;
+    float viewTop = _mapView.getCenter().y - _mapView.getSize().y / 2.f;
+    float viewRight = viewLeft + _mapView.getSize().x;
+    float viewBottom = viewTop + _mapView.getSize().y;
+
+    int minX = std::max(0, static_cast<int>(std::floor(viewLeft / render_theme::kCellSize)) - 1);
+    int minY = std::max(0, static_cast<int>(std::floor(viewTop / render_theme::kCellSize)) - 1);
+    int maxX = std::min(state.mapWidth - 1, static_cast<int>(std::ceil(viewRight / render_theme::kCellSize)) + 1);
+    int maxY = std::min(state.mapHeight - 1, static_cast<int>(std::ceil(viewBottom / render_theme::kCellSize)) + 1);
+
+    for (int y = minY; y <= maxY; ++y) {
+        for (int x = minX; x <= maxX; ++x) {
             const Tile &tile = state.tileAt(x, y);
             render_theme::PixelPos center = render_theme::tileCenterPx(x, y);
 
@@ -703,7 +742,7 @@ void Renderer::drawPlayers(const GameState &state)
                 center.y += std::sin(rad) * spreadRadius;
             }
 
-            render_theme::RgbColor team = render_theme::teamColor(player.team);
+            render_theme::RgbColor team = teamColorFor(state, player.team);
 
             drawGlow(_window, center, radius * 2.2f, sf::Color(255, 216, 10), count == 1 ? 150 : 90);
 
@@ -759,14 +798,14 @@ void Renderer::drawGameOverBanner(const GameState &state)
     overlay.setFillColor(sf::Color(0, 0, 0, 180));
     _window.draw(overlay);
 
-    render_theme::RgbColor teamColor = render_theme::teamColor(state.winningTeam);
+    render_theme::RgbColor winnerColor = teamColorFor(state, state.winningTeam);
     sf::Vector2f center(static_cast<float>(size.x) / 2.f, static_cast<float>(size.y) / 2.f);
 
     float pulse = 0.85f + 0.15f * std::sin(_animPhase * 3.f);
     sf::CircleShape banner(std::min(size.x, size.y) * 0.28f * pulse);
     banner.setFillColor(sf::Color::Transparent);
     banner.setOutlineThickness(4.f);
-    banner.setOutlineColor(toSfColor(teamColor));
+    banner.setOutlineColor(toSfColor(winnerColor));
     banner.setOrigin(banner.getRadius(), banner.getRadius());
     banner.setPosition(center);
     _window.draw(banner);
@@ -783,7 +822,7 @@ void Renderer::drawGameOverBanner(const GameState &state)
     _window.draw(title);
 
     sf::Text teamText("Equipe " + state.winningTeam, _font, 18);
-    teamText.setFillColor(toSfColor(teamColor));
+    teamText.setFillColor(toSfColor(winnerColor));
     sf::FloatRect teamBounds = teamText.getLocalBounds();
     teamText.setOrigin(teamBounds.left + teamBounds.width / 2.f, teamBounds.top + teamBounds.height / 2.f);
     teamText.setPosition(center.x, center.y + 14.f);
@@ -889,7 +928,7 @@ void Renderer::drawHud(const GameState &state)
 
     for (const auto &teamPair : state.teams) {
         const Team &team = teamPair.second;
-        render_theme::RgbColor teamRgb = render_theme::teamColor(team.name);
+        render_theme::RgbColor teamRgb = render_theme::teamColorByIndex(team.colorIndex);
 
         std::size_t aliveCount = 0;
         for (int pid : team.playerIds) {
@@ -904,7 +943,7 @@ void Renderer::drawHud(const GameState &state)
         _window.draw(swatch);
 
         drawText(team.name + "  " + std::to_string(aliveCount) + "/"
-            + std::to_string(team.playerIds.size()) + " vivant(s)",
+            + std::to_string(team.spawnedCount) + " vivant(s)",
             sf::Vector2f(x + 16.f, y), 13, sf::Color::White);
         y += 18.f;
 
@@ -999,12 +1038,43 @@ void Renderer::drawHud(const GameState &state)
     }
 }
 
+void Renderer::drawMessageLog(const GameState &state)
+{
+    if (!_hasFont || state.logMessages.empty())
+        return;
+
+    sf::Vector2u winSize = _window.getSize();
+    float mapAreaWidth = std::max(1.f, static_cast<float>(winSize.x) - kHudWidth);
+    const float padding = 8.f;
+    const float lineHeight = 16.f;
+    float panelHeight = static_cast<float>(state.logMessages.size()) * lineHeight + padding * 2.f;
+    float panelY = static_cast<float>(winSize.y) - panelHeight - padding;
+
+    sf::RectangleShape panel(sf::Vector2f(mapAreaWidth - padding * 2.f, panelHeight));
+    panel.setPosition(padding, panelY);
+    panel.setFillColor(sf::Color(10, 10, 18, 190));
+    _window.draw(panel);
+
+    float y = panelY + padding;
+    for (const LogMessage &message : state.logMessages) {
+        // S'estompe sur la derniere seconde avant expiration plutot que
+        // de disparaitre d'un coup.
+        float remaining = message.durationSeconds - message.elapsedSeconds;
+        float fadeT = std::min(std::max(remaining, 0.f), 1.f);
+        unsigned char alpha = static_cast<unsigned char>(255.f * fadeT);
+
+        drawText(message.text, sf::Vector2f(padding * 2.f, y), 12, sf::Color(220, 220, 230, alpha));
+        y += lineHeight;
+    }
+}
+
 void Renderer::draw(GameState &state, float dt)
 {
     _animPhase += dt;
     state.advanceIncantationAnimations(dt);
     state.advanceEggAnimations(dt);
     state.advanceEffects(dt);
+    state.advanceLogMessages(dt);
     updatePlayerAnimations(state, dt);
     ensureWindowSize(state.mapWidth, state.mapHeight);
     updateMapView(state.mapWidth, state.mapHeight);
@@ -1014,7 +1084,7 @@ void Renderer::draw(GameState &state, float dt)
 
     // Zone carte : passe par la camera (zoom/pan/letterbox).
     _window.setView(_mapView);
-    drawGrid(state.mapWidth, state.mapHeight);
+    drawGrid();
     drawTiles(state);
     drawIncantations(state);
     drawEggs(state);
@@ -1025,6 +1095,7 @@ void Renderer::draw(GameState &state, float dt)
     // par le zoom/pan de la carte.
     _window.setView(_window.getDefaultView());
     drawHud(state);
+    drawMessageLog(state);
     drawGameOverBanner(state);
     _window.display();
 }

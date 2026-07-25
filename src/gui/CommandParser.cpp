@@ -96,6 +96,16 @@ void CommandParser::removeEggIdFromOwningTeam(const Egg &egg)
     eggIds.erase(std::remove(eggIds.begin(), eggIds.end(), egg.id), eggIds.end());
 }
 
+void CommandParser::removePlayerIdFromTeam(const std::string &teamName, int playerId)
+{
+    auto teamIt = _state.teams.find(teamName);
+    if (teamIt == _state.teams.end())
+        return;
+
+    auto &ids = teamIt->second.playerIds;
+    ids.erase(std::remove(ids.begin(), ids.end(), playerId), ids.end());
+}
+
 void CommandParser::dispatch(const std::string &line)
 {
     if (line.empty())
@@ -175,7 +185,16 @@ void CommandParser::handleTna(std::istringstream &args)
     if (name.empty())
         return;
 
-    _state.teams.emplace(name, Team{name, {}, {}});
+    if (_state.teams.count(name) > 0)
+        return;
+
+    Team team;
+    team.name = name;
+    // Index d'ordre d'apparition : garantit des couleurs distinctes entre
+    // equipes (voir render_theme::teamColorByIndex), contrairement a un
+    // hash du nom qui peut entrer en collision au-dela de la palette.
+    team.colorIndex = static_cast<int>(_state.teams.size());
+    _state.teams.emplace(name, team);
     std::cout << "[parser] equipe: " << name << std::endl;
 }
 
@@ -210,7 +229,17 @@ void CommandParser::handlePnw(std::istringstream &args)
 
     auto teamIt = _state.teams.find(team);
     if (teamIt != _state.teams.end())
-        teamIt->second.playerIds.push_back(id);
+    {
+        auto &ids = teamIt->second.playerIds;
+        // pnw peut arriver deux fois pour le meme id (snapshot renvoye,
+        // ligne dupliquee...) : ne pas dupliquer dans la liste de l'equipe,
+        // ni recompter un spawn qui a deja ete compte.
+        if (std::find(ids.begin(), ids.end(), id) == ids.end())
+        {
+            ids.push_back(id);
+            teamIt->second.spawnedCount++;
+        }
+    }
 
     std::cout << "[parser] nouveau joueur #" << id << " (" << team << ") en (" << x << "," << y << ")" << std::endl;
 }
@@ -316,6 +345,7 @@ void CommandParser::handlePbc(std::istringstream &args)
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player)
         _state.addEffect(EffectKind::Broadcast, player->x, player->y, -1, -1, 1.f);
+    _state.addLogMessage("#" + std::to_string(id) + ": " + message);
 
     std::cout << "[parser] broadcast de #" << id << ": " << message << std::endl;
 }
@@ -440,7 +470,14 @@ void CommandParser::handlePdi(std::istringstream &args)
     if (player)
     {
         _state.addEffect(EffectKind::Death, player->x, player->y, -1, -1, 0.8f);
-        player->alive = false;
+        // Retire immediatement le joueur de l'etat plutot que de le garder
+        // indefiniment avec alive=false : l'animation de mort n'en depend
+        // pas (TransientEffect vit independamment dans state.effects),
+        // donc rien n'est perdu visuellement, et l'etat ne grossit plus
+        // sans fin sur une longue partie. Team::spawnedCount (jamais
+        // decremente) reste le total affiche par le HUD.
+        removePlayerIdFromTeam(player->team, id);
+        _state.players.erase(id);
     }
 
     std::cout << "[parser] mort du joueur #" << id << std::endl;
@@ -545,15 +582,18 @@ void CommandParser::handleSmg(std::istringstream &args)
     std::getline(args, message);
     if (!message.empty() && message[0] == ' ')
         message.erase(0, 1);
+    _state.addLogMessage(message);
     std::cout << "[parser] message serveur: " << message << std::endl;
 }
 
 void CommandParser::handleSuc(std::istringstream &)
 {
+    _state.addLogMessage("Commande inconnue (suc)");
     std::cerr << "[parser] le serveur signale une commande inconnue (suc)" << std::endl;
 }
 
 void CommandParser::handleSbp(std::istringstream &)
 {
+    _state.addLogMessage("Mauvais nombre de parametres (sbp)");
     std::cerr << "[parser] le serveur signale un mauvais nombre de parametres (sbp)" << std::endl;
 }

@@ -60,4 +60,9 @@ class CommandParser
         // eclos/non detruits. A appeler avant qu'un oeuf n'eclose (ebo) ou
         // ne disparaisse sans eclore (edi).
         void removeEggIdFromOwningTeam(const Egg &egg);
+
+        // Retire un id de Team::playerIds. A appeler quand un joueur meurt
+        // (pdi), pour que la liste ne contienne plus que des joueurs
+        // presents dans GameState::players.
+        void removePlayerIdFromTeam(const std::string &teamName, int playerId);
 };
