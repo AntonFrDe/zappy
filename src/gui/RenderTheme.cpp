@@ -29,6 +29,48 @@ RgbColor teamColor(const std::string &teamName)
     return kTeamPalette[h % kTeamPaletteSize];
 }
 
+namespace {
+
+// Conversion HSV -> RGB (h en degres [0,360), s et v dans [0,1]).
+RgbColor hsvToRgb(float h, float s, float v)
+{
+    float c = v * s;
+    float hPrime = h / 60.f;
+    float x = c * (1.f - std::fabs(std::fmod(hPrime, 2.f) - 1.f));
+    float r1 = 0.f, g1 = 0.f, b1 = 0.f;
+
+    if (hPrime < 1.f)      { r1 = c; g1 = x; }
+    else if (hPrime < 2.f) { r1 = x; g1 = c; }
+    else if (hPrime < 3.f) { g1 = c; b1 = x; }
+    else if (hPrime < 4.f) { g1 = x; b1 = c; }
+    else if (hPrime < 5.f) { r1 = x; b1 = c; }
+    else                   { r1 = c; b1 = x; }
+
+    float m = v - c;
+    return RgbColor{
+        static_cast<unsigned char>((r1 + m) * 255.f),
+        static_cast<unsigned char>((g1 + m) * 255.f),
+        static_cast<unsigned char>((b1 + m) * 255.f),
+    };
+}
+
+}
+
+RgbColor teamColorByIndex(int index)
+{
+    // Angle dore : la suite (index * 137.5077 mod 360) ne se regroupe
+    // jamais densement, quel que soit le nombre de termes generes. C'est
+    // la technique standard pour repartir N couleurs distinctes sans
+    // connaitre N a l'avance (contrairement a une palette fixe).
+    constexpr float kGoldenAngleDeg = 137.50776f;
+
+    if (index < 0)
+        index = 0;
+
+    float hue = std::fmod(static_cast<float>(index) * kGoldenAngleDeg, 360.f);
+    return hsvToRgb(hue, 0.62f, 0.92f);
+}
+
 bool isRareResource(int resourceIndex)
 {
     return resourceIndex >= 3 && resourceIndex <= 6;

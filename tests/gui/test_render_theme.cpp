@@ -23,6 +23,46 @@ Test(render_theme, team_color_is_deterministic)
 }
 
 // ---------------------------------------------------------------------------
+// teamColorByIndex: pas de collision, contrairement a teamColor (hash sur
+// une palette de 8) au-dela de 8 equipes
+// ---------------------------------------------------------------------------
+
+static bool rgbEqual(render_theme::RgbColor a, render_theme::RgbColor b)
+{
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+Test(render_theme, team_color_by_index_is_deterministic)
+{
+    render_theme::RgbColor first = render_theme::teamColorByIndex(3);
+    render_theme::RgbColor second = render_theme::teamColorByIndex(3);
+
+    cr_assert(rgbEqual(first, second));
+}
+
+Test(render_theme, team_color_by_index_has_no_collision_beyond_eight_teams)
+{
+    constexpr int kTeamCount = 16;
+    render_theme::RgbColor colors[kTeamCount];
+
+    for (int i = 0; i < kTeamCount; ++i)
+        colors[i] = render_theme::teamColorByIndex(i);
+
+    for (int i = 0; i < kTeamCount; ++i)
+        for (int j = i + 1; j < kTeamCount; ++j)
+            cr_assert_not(rgbEqual(colors[i], colors[j]),
+                "teamColorByIndex(%d) et teamColorByIndex(%d) sont identiques", i, j);
+}
+
+Test(render_theme, team_color_by_index_negative_is_clamped_not_crashing)
+{
+    render_theme::RgbColor negative = render_theme::teamColorByIndex(-5);
+    render_theme::RgbColor zero = render_theme::teamColorByIndex(0);
+
+    cr_assert(rgbEqual(negative, zero));
+}
+
+// ---------------------------------------------------------------------------
 // isRareResource: ordre protocole food=0, linemate=1, deraumere=2,
 // sibur=3, mendiane=4, phiras=5, thystame=6
 // ---------------------------------------------------------------------------

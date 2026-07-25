@@ -48,6 +48,13 @@ struct Team {
     std::vector<int> playerIds;
     std::vector<int> eggIds;
     int spawnedCount = 0;
+    // Index d'ordre d'apparition (0, 1, 2...), assigne une fois a la
+    // creation de l'equipe (voir CommandParser::handleTna). Sert a
+    // render_theme::teamColorByIndex() pour garantir des couleurs
+    // distinctes quel que soit le nombre d'equipes, contrairement a un
+    // hash du nom qui peut entrer en collision au-dela de la taille de la
+    // palette.
+    int colorIndex = -1;
 };
 
 struct Incantation {
@@ -146,6 +153,12 @@ struct GameState {
     {
         auto it = eggs.find(id);
         return it == eggs.end() ? nullptr : &it->second;
+    }
+
+    const Team *findTeam(const std::string &name) const
+    {
+        auto it = teams.find(name);
+        return it == teams.end() ? nullptr : &it->second;
     }
 
     // Duree (s) pendant laquelle une incantation terminee reste dans l'etat

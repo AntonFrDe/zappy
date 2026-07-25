@@ -26,7 +26,18 @@ constexpr float kMouthPeriodSeconds = 0.42f;
 
 // Couleur d'equipe deterministe (meme nom -> meme couleur), utilisee comme
 // liseré autour du Pac-Man ; le corps du Pac-Man reste toujours jaune.
+// Repose sur un hash du nom : au-dela de 8 equipes (taille de la palette
+// interne), deux equipes peuvent recevoir la meme couleur. Prefer
+// teamColorByIndex() partout ou un index d'ordre d'apparition stable est
+// disponible (GameState::Team::colorIndex) ; ne garder teamColor() que
+// pour un cas ou seul le nom est connu.
 RgbColor teamColor(const std::string &teamName);
+
+// Couleur d'equipe a partir d'un index d'ordre d'apparition (0, 1, 2...),
+// par rotation d'angle dore (~137.5 degres) : contrairement a un hash de
+// nom, deux index differents ne produisent jamais la meme teinte, quel
+// que soit le nombre d'equipes. index < 0 est ramene a 0.
+RgbColor teamColorByIndex(int index);
 
 // Ordre protocole des ressources : food=0, linemate=1, deraumere=2,
 // sibur=3, mendiane=4, phiras=5, thystame=6. Les 4 dernieres sont rendues

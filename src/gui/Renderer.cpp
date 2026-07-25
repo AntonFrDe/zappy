@@ -21,6 +21,16 @@ sf::Vector2f toSfVec(render_theme::PixelPos p)
     return sf::Vector2f(p.x, p.y);
 }
 
+// Couleur d'equipe sans collision : passe par Team::colorIndex (ordre
+// d'apparition, voir CommandParser::handleTna) quand l'equipe est connue,
+// et ne retombe sur le hash du nom (qui peut entrer en collision au-dela
+// de 8 equipes) que dans le cas defensif ou elle ne l'est pas encore.
+render_theme::RgbColor teamColorFor(const GameState &state, const std::string &teamName)
+{
+    const Team *team = state.findTeam(teamName);
+    return team ? render_theme::teamColorByIndex(team->colorIndex) : render_theme::teamColor(teamName);
+}
+
 // Simule un vrai degrade (SFML n'a pas de radial gradient natif) en
 // empilant plusieurs cercles semi-transparents, du plus grand/plus pale
 // au plus petit/plus intense - un halo "neon" plutot qu'un disque plat.
@@ -107,7 +117,7 @@ void drawParticipantHalos(sf::RenderWindow &window, sf::Vector2f center,
         sf::Vector2f pos(center.x + std::cos(rad) * radius, center.y + std::sin(rad) * radius);
 
         const Player *player = state.findPlayer(playerIds[i]);
-        render_theme::RgbColor color = player ? render_theme::teamColor(player->team)
+        render_theme::RgbColor color = player ? teamColorFor(state, player->team)
                                                : render_theme::RgbColor{255, 255, 255};
         float pulse = 0.6f + 0.4f * std::sin(animPhase * 5.f + static_cast<float>(i));
 
@@ -703,7 +713,7 @@ void Renderer::drawPlayers(const GameState &state)
                 center.y += std::sin(rad) * spreadRadius;
             }
 
-            render_theme::RgbColor team = render_theme::teamColor(player.team);
+            render_theme::RgbColor team = teamColorFor(state, player.team);
 
             drawGlow(_window, center, radius * 2.2f, sf::Color(255, 216, 10), count == 1 ? 150 : 90);
 
@@ -759,14 +769,14 @@ void Renderer::drawGameOverBanner(const GameState &state)
     overlay.setFillColor(sf::Color(0, 0, 0, 180));
     _window.draw(overlay);
 
-    render_theme::RgbColor teamColor = render_theme::teamColor(state.winningTeam);
+    render_theme::RgbColor winnerColor = teamColorFor(state, state.winningTeam);
     sf::Vector2f center(static_cast<float>(size.x) / 2.f, static_cast<float>(size.y) / 2.f);
 
     float pulse = 0.85f + 0.15f * std::sin(_animPhase * 3.f);
     sf::CircleShape banner(std::min(size.x, size.y) * 0.28f * pulse);
     banner.setFillColor(sf::Color::Transparent);
     banner.setOutlineThickness(4.f);
-    banner.setOutlineColor(toSfColor(teamColor));
+    banner.setOutlineColor(toSfColor(winnerColor));
     banner.setOrigin(banner.getRadius(), banner.getRadius());
     banner.setPosition(center);
     _window.draw(banner);
@@ -783,7 +793,7 @@ void Renderer::drawGameOverBanner(const GameState &state)
     _window.draw(title);
 
     sf::Text teamText("Equipe " + state.winningTeam, _font, 18);
-    teamText.setFillColor(toSfColor(teamColor));
+    teamText.setFillColor(toSfColor(winnerColor));
     sf::FloatRect teamBounds = teamText.getLocalBounds();
     teamText.setOrigin(teamBounds.left + teamBounds.width / 2.f, teamBounds.top + teamBounds.height / 2.f);
     teamText.setPosition(center.x, center.y + 14.f);
@@ -889,7 +899,7 @@ void Renderer::drawHud(const GameState &state)
 
     for (const auto &teamPair : state.teams) {
         const Team &team = teamPair.second;
-        render_theme::RgbColor teamRgb = render_theme::teamColor(team.name);
+        render_theme::RgbColor teamRgb = render_theme::teamColorByIndex(team.colorIndex);
 
         std::size_t aliveCount = 0;
         for (int pid : team.playerIds) {

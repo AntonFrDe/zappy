@@ -185,7 +185,16 @@ void CommandParser::handleTna(std::istringstream &args)
     if (name.empty())
         return;
 
-    _state.teams.emplace(name, Team{name, {}, {}});
+    if (_state.teams.count(name) > 0)
+        return;
+
+    Team team;
+    team.name = name;
+    // Index d'ordre d'apparition : garantit des couleurs distinctes entre
+    // equipes (voir render_theme::teamColorByIndex), contrairement a un
+    // hash du nom qui peut entrer en collision au-dela de la palette.
+    team.colorIndex = static_cast<int>(_state.teams.size());
+    _state.teams.emplace(name, team);
     std::cout << "[parser] equipe: " << name << std::endl;
 }
 
