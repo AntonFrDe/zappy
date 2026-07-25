@@ -181,7 +181,7 @@ Test(command_parser, pin_updates_position_and_inventory)
 // pdi: player death
 // ---------------------------------------------------------------------------
 
-Test(command_parser, pdi_marks_player_dead)
+Test(command_parser, pdi_removes_player_from_state)
 {
     GameState state;
     CommandParser parser(state);
@@ -189,7 +189,11 @@ Test(command_parser, pdi_marks_player_dead)
     parser.dispatch("pnw #1 0 0 1 1 rouge");
     parser.dispatch("pdi #1");
 
-    cr_assert_not(state.findPlayer(1)->alive);
+    // Le joueur est retire immediatement (pas garde indefiniment avec
+    // alive=false) : l'animation de mort ne depend pas de sa presence
+    // ici, elle vit dans state.effects.
+    cr_assert_null(state.findPlayer(1));
+    cr_assert_eq(state.players.size(), (size_t)0);
     cr_assert_eq(state.effects.size(), (size_t)1);
     cr_assert(state.effects[0].kind == EffectKind::Death);
 }

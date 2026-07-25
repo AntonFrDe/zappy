@@ -440,7 +440,12 @@ void CommandParser::handlePdi(std::istringstream &args)
     if (player)
     {
         _state.addEffect(EffectKind::Death, player->x, player->y, -1, -1, 0.8f);
-        player->alive = false;
+        // Retire immediatement le joueur de l'etat plutot que de le garder
+        // indefiniment avec alive=false : l'animation de mort n'en depend
+        // pas (TransientEffect vit independamment dans state.effects),
+        // donc rien n'est perdu visuellement, et l'etat ne grossit plus
+        // sans fin sur une longue partie.
+        _state.players.erase(id);
     }
 
     std::cout << "[parser] mort du joueur #" << id << std::endl;
