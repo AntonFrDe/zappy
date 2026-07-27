@@ -45,4 +45,24 @@ class CommandParser
         void handleSuc(std::istringstream &args);   // suc
         void handleSbp(std::istringstream &args);   // sbp
         static int parseId(const std::string &token);
+
+        // Rejette une ligne dont il manque des parametres (stream en echec
+        // apres extraction) ou qui contient des donnees en trop : sans ca,
+        // les entiers lus restent non initialises et sont quand meme
+        // utilises (resize de map, indexation de tableau...).
+        bool requireCompleteLine(std::istringstream &args, const char *cmdName);
+        static bool isValidOrientation(int o);
+        static bool isValidLevel(int level);
+        bool isInMapBounds(int x, int y) const;
+
+        // Retire l'id de cet oeuf de Team::eggIds (equipe du joueur qui l'a
+        // pondu), pour que la liste ne contienne plus que des oeufs non
+        // eclos/non detruits. A appeler avant qu'un oeuf n'eclose (ebo) ou
+        // ne disparaisse sans eclore (edi).
+        void removeEggIdFromOwningTeam(const Egg &egg);
+
+        // Retire un id de Team::playerIds. A appeler quand un joueur meurt
+        // (pdi), pour que la liste ne contienne plus que des joueurs
+        // presents dans GameState::players.
+        void removePlayerIdFromTeam(const std::string &teamName, int playerId);
 };

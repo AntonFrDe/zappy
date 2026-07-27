@@ -73,25 +73,41 @@ void map_move(map_t *map, int64_t *x, int64_t *y, direction_t dir)
 }
 
 // arrondi au plus proche, jamais moins de 1 (garanti par le sujet)
-static uint16_t resource_count_for(uint64_t width, uint64_t height, double density)
+static uint32_t resource_count_for(uint64_t width, uint64_t height, double density)
 {
     double raw = (double)(width * height) * density;
-    uint16_t count = (uint16_t)(raw + 0.5);
+    uint32_t count = (uint32_t)(raw + 0.5);
 
     return count < 1 ? 1 : count;
 }
 
+static uint32_t count_resource_on_map(map_t *map, int r)
+{
+    uint64_t nb_tiles = map->width * map->height;
+    uint32_t total = 0;
+
+    for (uint64_t i = 0; i < nb_tiles; i++)
+        total += map->tiles[i].quantities[r];
+    return total;
+}
+
+// ne rajoute que ce qui manque pour atteindre la cible (jamais de doublon)
 void map_spawn_resources(map_t *map)
 {
     uint64_t nb_tiles = map->width * map->height;
-    uint16_t count;
+    uint32_t target;
+    uint32_t current;
+    uint32_t missing;
     uint64_t idx;
 
     for (int r = 0; r < RESOURCE_COUNT; r++) {
-        count = resource_count_for(map->width, map->height, RESOURCE_DENSITY[r]);
-        for (uint16_t i = 0; i < count; i++) {
+        target = resource_count_for(map->width, map->height, RESOURCE_DENSITY[r]);
+        current = count_resource_on_map(map, r);
+        missing = target > current ? target - current : 0;
+        for (uint32_t i = 0; i < missing; i++) {
             idx = (uint64_t)rand() % nb_tiles;
-            map->tiles[idx].quantities[r]++;
+            if (map->tiles[idx].quantities[r] < UINT16_MAX)
+                map->tiles[idx].quantities[r]++;
         }
     }
 }

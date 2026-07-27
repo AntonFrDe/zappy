@@ -1,6 +1,7 @@
 #ifndef NETWORK_H_
     #define NETWORK_H_
     #include <poll.h>
+    #include <time.h>
     #include "struct.h"
     #include "client.h"
     #include "map.h"
@@ -20,6 +21,8 @@
         egg_list_t eggs;
         int next_client_id;
         int next_egg_id;
+        struct timespec next_resource_spawn;
+        bool game_over;
     } server_t;
 
     int server_init(server_t *server, flags_t *cfg);

@@ -6,7 +6,6 @@ EARLY_STONE_DISTRACTIONS = ["deraumere", "sibur"]
 GUARDED_STONE_LIMITS = {"sibur": 1, "mendiane": 1, "phiras": 0, "thystame": 0}
 FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
 SURVIVAL_MOVES = ["Forward", "Left", "Right"]
-EXPLORATION_TURNS = ["Left", "Right"]
 EXPLORATION_FORWARD_TARGETS = ["food", "linemate", "deraumere"]
 INCANTATION_STONES = {1: {"linemate": 1},
     2: {"linemate": 1, "deraumere": 1, "sibur": 1},
@@ -37,22 +36,53 @@ def get_current_tile(look):
     return look.strip("[]").split(",")[0].split()
 
 
+def parse_look_response(look):
+
+    return [tile.split() for tile in look.strip("[]").split(",")]
+
+
+def choose_direction_toward_item(look, item):
+
+    tiles = parse_look_response(look)
+
+    for index, tile in enumerate(tiles):
+        if item not in tile:
+            continue
+        if index == 0:
+            return None
+        row = int(index ** 0.5)
+        lateral = index - row * row - row
+        if lateral < 0:
+            return "Left"
+        if lateral > 0:
+            return "Right"
+        return "Forward"
+    return None
+
+
 def count_visible_item(tile, item):
 
     return tile.count(item)
 
 
+def count_other_players(tile):
+
+    return max(count_visible_item(tile, "player") - 1, 0)
+
+
 def choose_exploration_command(tile):
 
-    if count_visible_item(tile, "player") > 0:
+    player_count = count_visible_item(tile, "player")
+
+    if count_other_players(tile) > 0:
         return "Right"
     if "egg" in tile:
         return "Left"
     for resource in EXPLORATION_FORWARD_TARGETS:
         if resource in tile:
             return "Forward"
-    if len(tile) == 0:
-        return choice(EXPLORATION_TURNS)
+    if len(tile) == 0 or len(tile) == player_count:
+        return "Forward"
 
     return choice(SURVIVAL_MOVES)
 
@@ -143,7 +173,7 @@ def should_skip_extra_stone(inventory, tile):
 
 def should_turn_near_players(tile):
 
-    if count_visible_item(tile, "player") > 1:
+    if count_other_players(tile) > 0:
         return True
 
     return False
@@ -153,7 +183,7 @@ def should_leave_player_only_tile(tile):
 
     player_count = count_visible_item(tile, "player")
 
-    if player_count == 0:
+    if count_other_players(tile) == 0:
         return False
 
     return len(tile) == player_count
@@ -183,7 +213,7 @@ def should_follow_egg(tile):
 
 def should_check_inventory(tile):
 
-    if count_visible_item(tile, "player") > 0 and "food" not in tile:
+    if count_other_players(tile) > 0 and "food" not in tile:
         return True
     return False
 
@@ -192,7 +222,7 @@ def should_turn_on_busy_tile(tile):
 
     if len(tile) > 4:
         return True
-    if count_visible_item(tile, "player") > 0 and len(tile) > 2:
+    if count_other_players(tile) > 0 and len(tile) > 2:
         return True
     return False
 
@@ -212,7 +242,7 @@ def should_seek_linemate_before_other_stones(tile, inventory):
         return False
     if "linemate" in tile or "food" in tile:
         return False
-    if count_visible_item(tile, "player") > 0:
+    if count_other_players(tile) > 0:
         return False
     return any(resource in tile for resource in EARLY_STONE_DISTRACTIONS)
 
@@ -230,7 +260,7 @@ def should_take_guarded_stone(tile, inventory, resource, max_count):
     if "food" in tile and inventory.get("food", 0) < 5:
         return False
 
-    return count_visible_item(tile, "player") == 0
+    return count_other_players(tile) == 0
 
 
 def get_guarded_resource_to_take(tile, inventory):
@@ -264,7 +294,7 @@ def should_take_thystame_first(tile, inventory):
 
 def should_avoid_busy_resource_tile(tile):
 
-    if count_visible_item(tile, "player") == 0:
+    if count_other_players(tile) == 0:
         return False
     if "linemate" in tile:
         return True
@@ -279,7 +309,7 @@ def should_seek_food_before_rare_stone(tile, inventory):
 
     if inventory.get("food", 0) >= FOOD_LOW_LIMIT:
         return False
-    if "food" in tile or count_visible_item(tile, "player") > 0:
+    if "food" in tile or count_other_players(tile) > 0:
         return False
     for resource in RARE_STONES:
         if resource in tile:

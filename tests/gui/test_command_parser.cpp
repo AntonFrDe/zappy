@@ -99,6 +99,35 @@ Test(command_parser, pnw_adds_player_and_links_team)
     Team &team = state.teams.at("rouge");
     cr_assert_eq(team.playerIds.size(), (size_t)1);
     cr_assert_eq(team.playerIds[0], 1);
+    cr_assert_eq(team.spawnedCount, 1);
+}
+
+Test(command_parser, pnw_twice_for_same_id_does_not_duplicate_in_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.playerIds.size(), (size_t)1);
+    cr_assert_eq(team.spawnedCount, 1);
+}
+
+Test(command_parser, pdi_removes_id_from_team_but_keeps_spawned_count)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pdi #1");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.playerIds.size(), (size_t)0);
+    cr_assert_eq(team.spawnedCount, 1);
 }
 
 Test(command_parser, pnw_invalid_id_ignored)
@@ -153,6 +182,9 @@ Test(command_parser, plv_updates_level)
     parser.dispatch("plv #1 4");
 
     cr_assert_eq(state.findPlayer(1)->level, 4);
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::LevelUp);
+    cr_assert_eq(state.effects[0].level, 4);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +210,7 @@ Test(command_parser, pin_updates_position_and_inventory)
 // pdi: player death
 // ---------------------------------------------------------------------------
 
-Test(command_parser, pdi_marks_player_dead)
+Test(command_parser, pdi_removes_player_from_state)
 {
     GameState state;
     CommandParser parser(state);
@@ -186,7 +218,128 @@ Test(command_parser, pdi_marks_player_dead)
     parser.dispatch("pnw #1 0 0 1 1 rouge");
     parser.dispatch("pdi #1");
 
-    cr_assert_not(state.findPlayer(1)->alive);
+    // Le joueur est retire immediatement (pas garde indefiniment avec
+    // alive=false) : l'animation de mort ne depend pas de sa presence
+    // ici, elle vit dans state.effects.
+    cr_assert_null(state.findPlayer(1));
+    cr_assert_eq(state.players.size(), (size_t)0);
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::Death);
+}
+
+// ---------------------------------------------------------------------------
+// pex / pbc / pfk: expulsion, broadcast, ponte d'oeuf (effets visuels)
+// ---------------------------------------------------------------------------
+
+Test(command_parser, pex_adds_expulsion_effect_at_player_position)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pex #1");
+
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::Expulsion);
+    cr_assert_eq(state.effects[0].x, 2);
+    cr_assert_eq(state.effects[0].y, 3);
+}
+
+Test(command_parser, pbc_adds_broadcast_effect_at_player_position)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pbc #1 hello");
+
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::Broadcast);
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+    cr_assert_str_eq(state.logMessages[0].text.c_str(), "#1: hello");
+}
+
+// ---------------------------------------------------------------------------
+// smg / suc / sbp: messages serveur affiches dans la fenetre (voir
+// GameState::logMessages), pas seulement dans le terminal
+// ---------------------------------------------------------------------------
+
+Test(command_parser, smg_adds_log_message)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("smg le serveur va fermer");
+
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+    cr_assert_str_eq(state.logMessages[0].text.c_str(), "le serveur va fermer");
+}
+
+Test(command_parser, suc_adds_log_message, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("suc");
+
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+}
+
+Test(command_parser, sbp_adds_log_message, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("sbp");
+
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+}
+
+Test(command_parser, log_messages_are_capped)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    for (int i = 0; i < 10; ++i)
+        parser.dispatch("smg message " + std::to_string(i));
+
+    cr_assert_eq(state.logMessages.size(), GameState::kMaxLogMessages);
+    // Les plus anciens sont retires en premier : le dernier reste "message 9".
+    cr_assert_str_eq(state.logMessages.back().text.c_str(), "message 9");
+}
+
+Test(command_parser, log_messages_expire_after_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("smg hello");
+    cr_assert_eq(state.logMessages.size(), (size_t)1);
+
+    state.advanceLogMessages(state.logMessages[0].durationSeconds + 0.1f);
+    cr_assert_eq(state.logMessages.size(), (size_t)0);
+}
+
+Test(command_parser, pfk_adds_egg_laying_effect_at_player_position)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 2 3 1 1 rouge");
+    parser.dispatch("pfk #1");
+
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::EggLaying);
+}
+
+Test(command_parser, pex_of_unknown_player_adds_no_effect, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pex #99");
+
+    cr_assert_eq(state.effects.size(), (size_t)0);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +360,8 @@ Test(command_parser, pgt_takes_resource_from_tile)
     Player *player = state.findPlayer(1);
     cr_assert_eq(player->inventory[0], 1);
     cr_assert_eq(state.tileAt(0, 0).resources[0], 4);
+    cr_assert_eq(state.effects.size(), (size_t)1);
+    cr_assert(state.effects[0].kind == EffectKind::ResourcePickup);
 }
 
 Test(command_parser, pdr_drops_resource_on_tile)
@@ -223,6 +378,8 @@ Test(command_parser, pdr_drops_resource_on_tile)
     Player *player = state.findPlayer(1);
     cr_assert_eq(player->inventory[0], 0);
     cr_assert_eq(state.tileAt(0, 0).resources[0], 1);
+    // pgt puis pdr : le dernier effet ajoute doit etre le depot.
+    cr_assert(state.effects.back().kind == EffectKind::ResourceDrop);
 }
 
 Test(command_parser, pdr_never_goes_negative)
@@ -266,7 +423,74 @@ Test(command_parser, pie_ends_incantation)
     parser.dispatch("pic 1 1 2 #1 #2");
     parser.dispatch("pie 1 1 1");
 
-    cr_assert_not(state.findIncantationAt(1, 1)->active);
+    // findIncantationAt ne renvoie plus que les incantations actives, mais
+    // celle-ci reste dans la liste (inactive, resultat = succes) le temps
+    // que Renderer joue son animation de resultat.
+    cr_assert_null(state.findIncantationAt(1, 1));
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert_not(state.incantations[0].active);
+    cr_assert_eq(state.incantations[0].result, 1);
+}
+
+Test(command_parser, pie_failure_sets_result_to_zero)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 0");
+
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert_not(state.incantations[0].active);
+    cr_assert_eq(state.incantations[0].result, 0);
+}
+
+// Regression: une incantation terminee et jamais nettoyee ne doit pas
+// "absorber" le pie destine a une nouvelle incantation demarree ensuite
+// sur la meme case (sinon la nouvelle reste active indefiniment).
+Test(command_parser, pie_closes_the_new_incantation_not_a_stale_one)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 0");
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 1");
+
+    cr_assert_null(state.findIncantationAt(1, 1));
+}
+
+// ---------------------------------------------------------------------------
+// advanceIncantationAnimations: tient le resultat ~1s avant nettoyage
+// ---------------------------------------------------------------------------
+
+Test(command_parser, finished_incantation_survives_until_hold_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+    parser.dispatch("pie 1 1 1");
+
+    state.advanceIncantationAnimations(0.5f);
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+
+    state.advanceIncantationAnimations(0.5f);
+    cr_assert_eq(state.incantations.size(), (size_t)0);
+}
+
+Test(command_parser, active_incantation_is_not_pruned_by_animation_advance)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pic 1 1 2 #1");
+
+    state.advanceIncantationAnimations(10.f);
+
+    cr_assert_eq(state.incantations.size(), (size_t)1);
+    cr_assert(state.incantations[0].active);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +536,82 @@ Test(command_parser, edi_removes_egg)
     parser.dispatch("edi #10");
 
     cr_assert_null(state.findEgg(10));
+}
+
+Test(command_parser, ebo_removes_egg_id_from_owning_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 0 0 1 1 rouge");
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("ebo #10");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+Test(command_parser, edi_removes_egg_id_from_owning_team)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("pnw #1 0 0 1 1 rouge");
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("edi #10");
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+// Un oeuf initial (present au lancement de la partie, avant qu'aucun
+// joueur n'ait pondu) n'a pas de parent connu : le protocole peut envoyer
+// un id de parent invalide/negatif pour ce cas. La GUI doit quand meme
+// creer et retrouver l'oeuf, sans planter ni tenter de le lier a une
+// equipe.
+Test(command_parser, enw_with_unknown_parent_still_creates_egg)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("tna rouge");
+    parser.dispatch("enw #10 #-1 2 2");
+
+    Egg *egg = state.findEgg(10);
+    cr_assert_not_null(egg);
+    cr_assert_eq(egg->playerId, -1);
+
+    Team &team = state.teams.at("rouge");
+    cr_assert_eq(team.eggIds.size(), (size_t)0);
+}
+
+Test(command_parser, hatched_egg_survives_until_hold_duration)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("enw #10 #1 2 2");
+    parser.dispatch("ebo #10");
+
+    state.advanceEggAnimations(GameState::kEggHatchHoldSeconds / 2.f);
+    cr_assert_not_null(state.findEgg(10));
+
+    state.advanceEggAnimations(GameState::kEggHatchHoldSeconds);
+    cr_assert_null(state.findEgg(10));
+}
+
+Test(command_parser, unhatched_egg_is_not_pruned_by_animation_advance)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("enw #10 #1 2 2");
+
+    state.advanceEggAnimations(10.f);
+
+    cr_assert_not_null(state.findEgg(10));
 }
 
 // ---------------------------------------------------------------------------
@@ -380,14 +680,71 @@ Test(command_parser, missing_arguments_do_not_crash, .init = redirect_all_std)
     GameState state;
     CommandParser parser(state);
 
-    // idToken reste vide quand le flux est a court d'arguments, donc
-    // parseId() rejette la commande avant toute lecture des entiers
-    // non initialises (x, y, o, ...). "msz" est volontairement exclu :
-    // resizeMap() consommerait directement des int non initialises.
+    // requireCompleteLine() rejette toute ligne dont l'extraction des
+    // entiers a echoue avant qu'ils soient utilises (resize de map,
+    // indexation de tableau, etc.).
+    parser.dispatch("msz");
+    parser.dispatch("bct");
     parser.dispatch("pnw");
     parser.dispatch("ppo");
     parser.dispatch("plv");
-    parser.dispatch("bct");
+    parser.dispatch("pin");
+    parser.dispatch("pic");
+    parser.dispatch("pie");
+    parser.dispatch("enw");
+    parser.dispatch("sgt");
+    parser.dispatch("sst");
 
-    cr_assert(true);
+    cr_assert_eq(state.mapWidth, 0);
+    cr_assert_eq(state.mapHeight, 0);
+}
+
+Test(command_parser, msz_rejects_non_positive_or_absurd_dimensions, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("msz 0 5");
+    cr_assert_eq(state.mapWidth, 0);
+
+    parser.dispatch("msz -3 5");
+    cr_assert_eq(state.mapWidth, 0);
+
+    parser.dispatch("msz 999999999 5");
+    cr_assert_eq(state.mapWidth, 0);
+
+    parser.dispatch("msz 10 8");
+    cr_assert_eq(state.mapWidth, 10);
+    cr_assert_eq(state.mapHeight, 8);
+}
+
+Test(command_parser, pnw_rejects_invalid_orientation_or_level, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("pnw #1 0 0 0 1 rouge");
+    cr_assert_null(state.findPlayer(1));
+
+    parser.dispatch("pnw #1 0 0 5 1 rouge");
+    cr_assert_null(state.findPlayer(1));
+
+    parser.dispatch("pnw #1 0 0 1 9 rouge");
+    cr_assert_null(state.findPlayer(1));
+
+    parser.dispatch("pnw #1 0 0 1 8 rouge");
+    cr_assert_not_null(state.findPlayer(1));
+}
+
+Test(command_parser, bct_rejects_negative_quantities, .init = redirect_all_std)
+{
+    GameState state;
+    CommandParser parser(state);
+
+    parser.dispatch("msz 3 3");
+    parser.dispatch("bct 1 1 -1 0 0 0 0 0 0");
+
+    Tile &tile = state.tileAt(1, 1);
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        cr_assert_eq(tile.resources[i], 0);
 }

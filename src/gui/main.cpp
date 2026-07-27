@@ -4,6 +4,7 @@
 #include "GameState.hpp"
 #include "CommandParser.hpp"
 #include "NetworkClient.hpp"
+#include "Renderer.hpp"
 
 int main(int argc, char **argv)
 {
@@ -48,9 +49,13 @@ int main(int argc, char **argv)
     std::cout << "Taille de la map: " << width << "x" << height << std::endl;
 
     CommandParser parser(state);
+    Renderer renderer;
+    sf::Clock clock;
     std::vector<std::string> lines;
-    while (network.isConnected())
+
+    while (network.isConnected() && renderer.isOpen())
     {
+        renderer.pollEvents();
         if (!network.receiveLines(lines, errorMsg))
         {
             std::cerr << "[network] " << errorMsg << std::endl;
@@ -58,6 +63,7 @@ int main(int argc, char **argv)
         }
         for (const std::string &line : lines)
             parser.dispatch(line);
+        renderer.draw(state, clock.restart().asSeconds());
     }
     std::cout << "Deconnexion du serveur." << std::endl;
     return 0;

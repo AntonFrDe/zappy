@@ -1,4 +1,6 @@
 #include "CommandParser.hpp"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 
 CommandParser::CommandParser(GameState &state) : _state(state)
@@ -34,10 +36,17 @@ void CommandParser::registerHandlers()
     _handlers["sbp"] = [this](std::istringstream &str) { handleSbp(str); };
 }
 
+namespace {
+constexpr int kMaxMapDimension = 10000;
+}
+
 int CommandParser::parseId(const std::string &token)
 {
-    if (token.empty() || token[0] != '#')
+    if (token.size() < 2 || token[0] != '#')
         return -1;
+    for (std::size_t i = 1; i < token.size(); ++i)
+        if (!std::isdigit(static_cast<unsigned char>(token[i])))
+            return -1;
     try
     {
         return std::stoi(token.substr(1));
@@ -46,6 +55,55 @@ int CommandParser::parseId(const std::string &token)
     {
         return -1;
     }
+}
+
+bool CommandParser::requireCompleteLine(std::istringstream &args, const char *cmdName)
+{
+    if (args.fail())
+    {
+        std::cerr << "[parser] " << cmdName << ": ligne incomplete ou malformee, ignoree" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool CommandParser::isValidOrientation(int o)
+{
+    return o >= 1 && o <= 4;
+}
+
+bool CommandParser::isValidLevel(int level)
+{
+    return level >= 1 && level <= 8;
+}
+
+bool CommandParser::isInMapBounds(int x, int y) const
+{
+    return x >= 0 && y >= 0 && x < _state.mapWidth && y < _state.mapHeight;
+}
+
+void CommandParser::removeEggIdFromOwningTeam(const Egg &egg)
+{
+    Player *parent = egg.playerId >= 0 ? _state.findPlayer(egg.playerId) : nullptr;
+    if (!parent)
+        return;
+
+    auto teamIt = _state.teams.find(parent->team);
+    if (teamIt == _state.teams.end())
+        return;
+
+    auto &eggIds = teamIt->second.eggIds;
+    eggIds.erase(std::remove(eggIds.begin(), eggIds.end(), egg.id), eggIds.end());
+}
+
+void CommandParser::removePlayerIdFromTeam(const std::string &teamName, int playerId)
+{
+    auto teamIt = _state.teams.find(teamName);
+    if (teamIt == _state.teams.end())
+        return;
+
+    auto &ids = teamIt->second.playerIds;
+    ids.erase(std::remove(ids.begin(), ids.end(), playerId), ids.end());
 }
 
 void CommandParser::dispatch(const std::string &line)
@@ -81,6 +139,14 @@ void CommandParser::handleMsz(std::istringstream &args)
 {
     int x, y;
     args >> x >> y;
+    if (!requireCompleteLine(args, "msz"))
+        return;
+    if (x <= 0 || y <= 0 || x > kMaxMapDimension || y > kMaxMapDimension)
+    {
+        std::cerr << "[parser] msz: dimensions de map invalides (" << x << "x" << y << ")" << std::endl;
+        return;
+    }
+
     _state.resizeMap(x, y);
     std::cout << "[parser] map size: " << x << "x" << y << std::endl;
 }
@@ -89,16 +155,27 @@ void CommandParser::handleBct(std::istringstream &args)
 {
     int x, y;
     args >> x >> y;
-
-    if (x < 0 || y < 0 || x >= _state.mapWidth || y >= _state.mapHeight)
+    if (!requireCompleteLine(args, "bct") || !isInMapBounds(x, y))
     {
-        std::cerr << "[parser] bct: coordonnees hors map (" << x << "," << y << ")" << std::endl;
+        std::cerr << "[parser] bct: coordonnees hors map ou ligne invalide" << std::endl;
         return;
     }
 
+    int quantities[RESOURCE_COUNT];
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        args >> quantities[i];
+    if (!requireCompleteLine(args, "bct"))
+        return;
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        if (quantities[i] < 0)
+        {
+            std::cerr << "[parser] bct: quantite negative ignoree" << std::endl;
+            return;
+        }
+
     Tile &tile = _state.tileAt(x, y);
     for (int i = 0; i < RESOURCE_COUNT; ++i)
-        args >> tile.resources[i];
+        tile.resources[i] = quantities[i];
 }
 
 void CommandParser::handleTna(std::istringstream &args)
@@ -108,7 +185,16 @@ void CommandParser::handleTna(std::istringstream &args)
     if (name.empty())
         return;
 
-    _state.teams.emplace(name, Team{name, {}, {}});
+    if (_state.teams.count(name) > 0)
+        return;
+
+    Team team;
+    team.name = name;
+    // Index d'ordre d'apparition : garantit des couleurs distinctes entre
+    // equipes (voir render_theme::teamColorByIndex), contrairement a un
+    // hash du nom qui peut entrer en collision au-dela de la palette.
+    team.colorIndex = static_cast<int>(_state.teams.size());
+    _state.teams.emplace(name, team);
     std::cout << "[parser] equipe: " << name << std::endl;
 }
 
@@ -120,8 +206,11 @@ void CommandParser::handlePnw(std::istringstream &args)
 
     args >> idToken >> x >> y >> o >> level >> team;
     int id = parseId(idToken);
-    if (id < 0)
+    if (!requireCompleteLine(args, "pnw") || id < 0 || !isValidOrientation(o) || !isValidLevel(level))
+    {
+        std::cerr << "[parser] pnw: ligne invalide ignoree" << std::endl;
         return;
+    }
 
     Player player;
     player.id = id;
@@ -131,12 +220,26 @@ void CommandParser::handlePnw(std::istringstream &args)
     player.level = level;
     player.team = team;
     player.alive = true;
+    // Pas d'animation de deplacement a l'apparition : evite de le voir
+    // glisser depuis (0, 0) au moment ou il rejoint la partie.
+    player.animX = static_cast<float>(x);
+    player.animY = static_cast<float>(y);
 
     _state.players[id] = player;
 
     auto teamIt = _state.teams.find(team);
     if (teamIt != _state.teams.end())
-        teamIt->second.playerIds.push_back(id);
+    {
+        auto &ids = teamIt->second.playerIds;
+        // pnw peut arriver deux fois pour le meme id (snapshot renvoye,
+        // ligne dupliquee...) : ne pas dupliquer dans la liste de l'equipe,
+        // ni recompter un spawn qui a deja ete compte.
+        if (std::find(ids.begin(), ids.end(), id) == ids.end())
+        {
+            ids.push_back(id);
+            teamIt->second.spawnedCount++;
+        }
+    }
 
     std::cout << "[parser] nouveau joueur #" << id << " (" << team << ") en (" << x << "," << y << ")" << std::endl;
 }
@@ -148,7 +251,13 @@ void CommandParser::handlePpo(std::istringstream &args)
 
     args >> idToken >> x >> y >> o;
     int id = parseId(idToken);
-    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (!requireCompleteLine(args, "ppo") || id < 0 || !isValidOrientation(o))
+    {
+        std::cerr << "[parser] ppo: ligne invalide ignoree" << std::endl;
+        return;
+    }
+
+    Player *player = _state.findPlayer(id);
     if (!player)
     {
         std::cerr << "[parser] ppo: joueur #" << id << " inconnu" << std::endl;
@@ -167,11 +276,15 @@ void CommandParser::handlePlv(std::istringstream &args)
 
     args >> idToken >> level;
     int id = parseId(idToken);
-    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (!requireCompleteLine(args, "plv") || id < 0 || !isValidLevel(level))
+        return;
+
+    Player *player = _state.findPlayer(id);
     if (!player)
         return;
 
     player->level = level;
+    _state.addEffect(EffectKind::LevelUp, player->x, player->y, -1, level, 0.7f);
 }
 
 void CommandParser::handlePin(std::istringstream &args)
@@ -181,14 +294,29 @@ void CommandParser::handlePin(std::istringstream &args)
 
     args >> idToken >> x >> y;
     int id = parseId(idToken);
-    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (id < 0)
+        return;
+
+    int quantities[RESOURCE_COUNT];
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        args >> quantities[i];
+    if (!requireCompleteLine(args, "pin"))
+        return;
+    for (int i = 0; i < RESOURCE_COUNT; ++i)
+        if (quantities[i] < 0)
+        {
+            std::cerr << "[parser] pin: quantite negative ignoree" << std::endl;
+            return;
+        }
+
+    Player *player = _state.findPlayer(id);
     if (!player)
         return;
 
     player->x = x;
     player->y = y;
     for (int i = 0; i < RESOURCE_COUNT; ++i)
-        args >> player->inventory[i];
+        player->inventory[i] = quantities[i];
 }
 
 void CommandParser::handlePex(std::istringstream &args)
@@ -196,6 +324,10 @@ void CommandParser::handlePex(std::istringstream &args)
     std::string idToken;
     args >> idToken;
     int id = parseId(idToken);
+    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (player)
+        _state.addEffect(EffectKind::Expulsion, player->x, player->y);
+
     std::cout << "[parser] joueur #" << id << " expulse" << std::endl;
 }
 
@@ -210,6 +342,11 @@ void CommandParser::handlePbc(std::istringstream &args)
     if (!message.empty() && message[0] == ' ')
         message.erase(0, 1);
 
+    Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
+    if (player)
+        _state.addEffect(EffectKind::Broadcast, player->x, player->y, -1, -1, 1.f);
+    _state.addLogMessage("#" + std::to_string(id) + ": " + message);
+
     std::cout << "[parser] broadcast de #" << id << ": " << message << std::endl;
 }
 
@@ -217,6 +354,11 @@ void CommandParser::handlePic(std::istringstream &args)
 {
     int x, y, level;
     args >> x >> y >> level;
+    if (!requireCompleteLine(args, "pic") || !isValidLevel(level))
+    {
+        std::cerr << "[parser] pic: ligne invalide ignoree" << std::endl;
+        return;
+    }
 
     Incantation incantation;
     incantation.x = x;
@@ -242,10 +384,23 @@ void CommandParser::handlePie(std::istringstream &args)
 {
     int x, y, result;
     args >> x >> y >> result;
+    if (!requireCompleteLine(args, "pie"))
+        return;
 
-    Incantation *incantation = _state.findIncantationAt(x, y);
-    if (incantation)
-        incantation->active = false;
+    // Ferme la plus recente incantation encore active sur cette case
+    // (recherche depuis la fin) : sans ca, une ancienne incantation deja
+    // terminee mais pas encore nettoyee restait trouvable en premier et
+    // "absorbait" le pie destine a la nouvelle, qui restait active a vie.
+    // Elle n'est pas retiree tout de suite : Renderer joue une animation
+    // de succes/echec pendant environ une seconde avant de la nettoyer
+    // (GameState::advanceIncantationAnimations).
+    auto rit = std::find_if(_state.incantations.rbegin(), _state.incantations.rend(),
+        [x, y](const Incantation &inc) { return inc.x == x && inc.y == y && inc.active; });
+    if (rit != _state.incantations.rend())
+    {
+        rit->active = false;
+        rit->result = result ? 1 : 0;
+    }
 
     std::cout << "[parser] fin d'incantation en (" << x << "," << y << ") -> "
                << (result ? "succes" : "echec") << std::endl;
@@ -255,7 +410,12 @@ void CommandParser::handlePfk(std::istringstream &args)
 {
     std::string id;
     args >> id;
-    std::cout << "[parser] joueur #" << parseId(id) << " pond un oeuf" << std::endl;
+    int playerId = parseId(id);
+    Player *player = playerId >= 0 ? _state.findPlayer(playerId) : nullptr;
+    if (player)
+        _state.addEffect(EffectKind::EggLaying, player->x, player->y);
+
+    std::cout << "[parser] joueur #" << playerId << " pond un oeuf" << std::endl;
 }
 
 void CommandParser::handlePdr(std::istringstream &args)
@@ -263,6 +423,8 @@ void CommandParser::handlePdr(std::istringstream &args)
     std::string idToken;
     int resourceIndex;
     args >> idToken >> resourceIndex;
+    if (!requireCompleteLine(args, "pdr"))
+        return;
 
     int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
@@ -270,8 +432,9 @@ void CommandParser::handlePdr(std::istringstream &args)
     {
         if (player->inventory[resourceIndex] > 0)
             player->inventory[resourceIndex]--;
-        if (player->x >= 0 && player->y >= 0 && player->x < _state.mapWidth && player->y < _state.mapHeight)
+        if (isInMapBounds(player->x, player->y))
             _state.tileAt(player->x, player->y).resources[resourceIndex]++;
+        _state.addEffect(EffectKind::ResourceDrop, player->x, player->y, resourceIndex);
     }
 }
 
@@ -280,18 +443,21 @@ void CommandParser::handlePgt(std::istringstream &args)
     std::string idToken;
     int resourceIndex;
     args >> idToken >> resourceIndex;
+    if (!requireCompleteLine(args, "pgt"))
+        return;
 
     int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player && resourceIndex >= 0 && resourceIndex < RESOURCE_COUNT)
     {
         player->inventory[resourceIndex]++;
-        if (player->x >= 0 && player->y >= 0 && player->x < _state.mapWidth && player->y < _state.mapHeight)
+        if (isInMapBounds(player->x, player->y))
         {
             Tile &tile = _state.tileAt(player->x, player->y);
             if (tile.resources[resourceIndex] > 0)
                 tile.resources[resourceIndex]--;
         }
+        _state.addEffect(EffectKind::ResourcePickup, player->x, player->y, resourceIndex);
     }
 }
 
@@ -302,7 +468,17 @@ void CommandParser::handlePdi(std::istringstream &args)
     int id = parseId(idToken);
     Player *player = id >= 0 ? _state.findPlayer(id) : nullptr;
     if (player)
-        player->alive = false;
+    {
+        _state.addEffect(EffectKind::Death, player->x, player->y, -1, -1, 0.8f);
+        // Retire immediatement le joueur de l'etat plutot que de le garder
+        // indefiniment avec alive=false : l'animation de mort n'en depend
+        // pas (TransientEffect vit independamment dans state.effects),
+        // donc rien n'est perdu visuellement, et l'etat ne grossit plus
+        // sans fin sur une longue partie. Team::spawnedCount (jamais
+        // decremente) reste le total affiche par le HUD.
+        removePlayerIdFromTeam(player->team, id);
+        _state.players.erase(id);
+    }
 
     std::cout << "[parser] mort du joueur #" << id << std::endl;
 }
@@ -313,6 +489,8 @@ void CommandParser::handleEnw(std::istringstream &args)
     int x, y;
 
     args >> eggIdToken >> playerIdToken >> x >> y;
+    if (!requireCompleteLine(args, "enw"))
+        return;
     int eggId = parseId(eggIdToken);
     int playerId = parseId(playerIdToken);
     if (eggId < 0)
@@ -344,9 +522,15 @@ void CommandParser::handleEbo(std::istringstream &args)
 
     Egg *egg = eggId >= 0 ? _state.findEgg(eggId) : nullptr;
     if (egg)
+    {
         egg->hatched = true;
+        egg->hatchedElapsedSeconds = 0.f;
+        removeEggIdFromOwningTeam(*egg);
+    }
 
-    std::cout << "[parser] oeuf #" << id << " a eclos" << std::endl;
+    // id contient deja le "#" (ex: "#10") : le concatener a un second "#"
+    // affichait "##10" au lieu de "#10".
+    std::cout << "[parser] oeuf " << id << " a eclos" << std::endl;
 }
 
 void CommandParser::handleEdi(std::istringstream &args)
@@ -354,14 +538,21 @@ void CommandParser::handleEdi(std::istringstream &args)
     std::string id;
     args >> id;
     int eggId = parseId(id);
-    if (eggId >= 0)
-        _state.eggs.erase(eggId);
+    if (eggId < 0)
+        return;
+
+    Egg *egg = _state.findEgg(eggId);
+    if (egg)
+        removeEggIdFromOwningTeam(*egg);
+    _state.eggs.erase(eggId);
 }
 
 void CommandParser::handleSgt(std::istringstream &args)
 {
     int t;
     args >> t;
+    if (!requireCompleteLine(args, "sgt") || t <= 0)
+        return;
     _state.timeUnit = t;
     std::cout << "[parser] time unit: " << t << std::endl;
 }
@@ -370,6 +561,8 @@ void CommandParser::handleSst(std::istringstream &args)
 {
     int t;
     args >> t;
+    if (!requireCompleteLine(args, "sst") || t <= 0)
+        return;
     _state.timeUnit = t;
     std::cout << "[parser] time unit modifie: " << t << std::endl;
 }
@@ -389,15 +582,18 @@ void CommandParser::handleSmg(std::istringstream &args)
     std::getline(args, message);
     if (!message.empty() && message[0] == ' ')
         message.erase(0, 1);
+    _state.addLogMessage(message);
     std::cout << "[parser] message serveur: " << message << std::endl;
 }
 
 void CommandParser::handleSuc(std::istringstream &)
 {
+    _state.addLogMessage("Commande inconnue (suc)");
     std::cerr << "[parser] le serveur signale une commande inconnue (suc)" << std::endl;
 }
 
 void CommandParser::handleSbp(std::istringstream &)
 {
+    _state.addLogMessage("Mauvais nombre de parametres (sbp)");
     std::cerr << "[parser] le serveur signale un mauvais nombre de parametres (sbp)" << std::endl;
 }

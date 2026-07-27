@@ -40,20 +40,21 @@ static void get_forward_lateral(direction_t dir, int64_t *fx, int64_t *fy,
     }
 }
 
-static bool player_is_at(server_t *server, client_t *self, int64_t x, int64_t y)
+static int count_players_at(server_t *server, int64_t x, int64_t y)
 {
     client_t *other;
+    int count = 0;
 
     for (int i = 1; i < server->nfds; i++) {
         other = server->clients[i];
 
-        if (other == self || other->player == NULL)
+        if (other->player == NULL)
             continue;
 
         if (other->player->x == x && other->player->y == y)
-            return true;
+            count++;
     }
-    return false;
+    return count;
 }
 
 static void send_tile_content(server_t *server, client_t *self,
@@ -61,8 +62,11 @@ static void send_tile_content(server_t *server, client_t *self,
 {
     tile_t *tile = map_get_tile(server->map, x, y);
     bool first = true;
+    int player_count = count_players_at(server, x, y);
 
-    if (player_is_at(server, self, x, y)) {
+    for (int n = 0; n < player_count; n++) {
+        if (!first)
+            client_queue_send(self, " ");
         client_queue_send(self, "player");
         first = false;
     }

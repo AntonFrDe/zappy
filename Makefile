@@ -29,14 +29,14 @@ GUI_OBJ		=	$(GUI_SRC:.cpp=.o)
 
 CXX		=	g++
 CXXFLAGS	+=	-Wall -Wextra -I$(GUI_INC_DIR)
-# Décommenter une fois SFML utilisé dans le code :
-# GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
+GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
 
 # ---------------------------------------------------------------------------
 # AI (Python)
 # ---------------------------------------------------------------------------
 AI_SRC_DIR	=	src/ai
 AI_MAIN		=	$(AI_SRC_DIR)/main.py
+AI_SRC		=	$(wildcard $(AI_SRC_DIR)/*.py)
 
 # ---------------------------------------------------------------------------
 # Tests (Criterion)
@@ -63,7 +63,7 @@ TESTS_GUI_SRC	=	$(wildcard $(TESTS_GUI_SRC_DIR)/*.cpp)
 TESTS_GUI_PARSER_SRC=	$(filter-out $(GUI_SRC_DIR)/main.cpp, $(GUI_SRC))
 
 TESTS_GUI_CXXFLAGS=	-Wall -Wextra -I$(GUI_INC_DIR) $(CRITERION_CFLAGS)
-TESTS_GUI_LDLIBS=	$(CRITERION_LDLIBS) -lpthread
+TESTS_GUI_LDLIBS=	$(CRITERION_LDLIBS) -lpthread $(GUI_LDLIBS)
 
 # ---------------------------------------------------------------------------
 # Rules
@@ -76,7 +76,7 @@ $(SERVER_NAME):	$(SERVER_OBJ)
 $(GUI_NAME):	$(GUI_OBJ)
 	$(CXX) -o $(GUI_NAME) $(GUI_OBJ) $(GUI_LDLIBS)
 
-$(AI_NAME):	$(AI_MAIN)
+$(AI_NAME):	$(AI_SRC)
 	cp $(AI_MAIN) $(AI_NAME)
 	chmod +x $(AI_NAME)
 

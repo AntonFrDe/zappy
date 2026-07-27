@@ -2,4 +2,5 @@ zappy_server
 zappy_gui
 zappy_ai
 tests_server
+tests_gui
 *.o

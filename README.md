@@ -58,7 +58,7 @@ python3 -m unittest tests.ai.test_main -v   # ia (unittest)
 | Anton | Serveur / Architecture |
 | Nikita | IA |
 | Luca | GUI |
-| Amine | Tests |
+| Amine | Tests / Graphique GUI |
 
 ## Suivi du projet
 

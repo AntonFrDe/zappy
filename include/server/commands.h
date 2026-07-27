@@ -19,8 +19,10 @@
 
 // verifie joueurs (meme niveau) + pierres sur la case du client
     bool incantation_check(server_t *server, client_t *client);
-// gele (meme ready_at) les mob trouves sur la case
+// associe et gele les joueurs de meme niveau trouves sur la case
     void incantation_freeze_others(server_t *server, client_t *client);
+// libere tous les participants associes a l'incantation de client
+    void incantation_unfreeze_players(server_t *server, int owner_id);
 // diffuse pic aux GUI (participants = client + mob geles sur la case)
     void incantation_notify_start(server_t *server, client_t *client);
 

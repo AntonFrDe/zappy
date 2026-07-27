@@ -8,7 +8,11 @@ Le client IA pilote un seul joueur : il envoie des commandes texte au serveur, l
 
 | Fichier | Rôle |
 |---|---|
-| `main.py` | Connexion réseau, boucle principale (`run_ai_loop`), point d'entrée |
+| `main.py` | Arguments et point d'entrée |
+| `client.py` | Connexion réseau et protocole client/serveur |
+| `bot.py` | Boucle principale (`run_ai_loop`) et actions du joueur |
+| `incantation.py` | Incantations et coordination par broadcast |
+| `spawner.py` | Création et lancement des nouveaux clients |
 | `strategy.py` | Fonctions de décision pures (priorités, incantation, ramassage) |
 
 ## Démarrage
