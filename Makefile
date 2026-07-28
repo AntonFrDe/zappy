@@ -5,7 +5,7 @@
 SERVER_NAME	=	zappy_server
 GUI_NAME	=	zappy_gui
 AI_NAME		=	zappy_ai
-
+BONUS_NAME	=	zappy_bonus
 # ---------------------------------------------------------------------------
 # Server (C)
 # ---------------------------------------------------------------------------
@@ -44,6 +44,17 @@ AI_SRC		=	$(wildcard $(AI_SRC_DIR)/*.py)
 CRITERION_DIR	=	/usr/local/criterion-2.4.2
 CRITERION_CFLAGS=	-I$(CRITERION_DIR)/include
 CRITERION_LDLIBS=	-L$(CRITERION_DIR)/lib -Wl,-rpath,$(CRITERION_DIR)/lib -lcriterion
+
+# ---------------------------------------------------------------------------
+# Bonus
+# ---------------------------------------------------------------------------
+BONUS_NAME	=	zappy_bonus
+BONUS_SRC_DIR	=	src/bonus
+BONUS_SRC	=	$(wildcard $(BONUS_SRC_DIR)/*.cpp)
+BONUS_OBJ	=	$(BONUS_SRC:.cpp=.o)
+BONUS_INC_DIR	=	include/gui
+BONUS_CFLAGS	=	-Wall -Wextra -I. -I$(BONUS_INC_DIR)
+BONUS_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
 
 TESTS_NAME	=	tests_server
 
@@ -89,6 +100,9 @@ $(TESTS_GUI_NAME):	$(TESTS_GUI_PARSER_SRC) $(TESTS_GUI_SRC)
 tests_run:	$(TESTS_NAME) $(TESTS_GUI_NAME)
 	./$(TESTS_NAME)
 	./$(TESTS_GUI_NAME)
+
+$(BONUS_NAME):	$(BONUS_OBJ)
+	$(CXX) -o $(BONUS_NAME) $(BONUS_OBJ) $(BONUS_LDLIBS)
 
 clean:
 	rm -f $(SERVER_OBJ) $(GUI_OBJ)
