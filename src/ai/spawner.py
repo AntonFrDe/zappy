@@ -10,16 +10,38 @@ START_COMMAND = []
 CHILD_AI = None
 PLAYER_NUMBER = 1
 TEAM_GOAL = 6
+BACKUP_PLAYER_NUMBER = TEAM_GOAL + 1
+MAIN_PROCESS_ID = None
 CHILD_STOPPED_AT = None
 RETRY_WAIT = 2
 
 
-def set_start_command(host, port, team, player_number):
+def set_start_command(host, port, team, player_number, main_process_id):
 
-    global START_COMMAND, PLAYER_NUMBER
+    global START_COMMAND, PLAYER_NUMBER, MAIN_PROCESS_ID
 
     PLAYER_NUMBER = player_number
-    START_COMMAND = [sys.executable, str(AI_MAIN),"-p", str(port), "-n", team, "-h", host, "-i", str(player_number + 1)]
+    MAIN_PROCESS_ID = main_process_id
+
+    next_player = player_number + 1
+
+    START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port), "-n", team, "-h", host, "-i", str(next_player), "--main-pid", str(main_process_id)]
+
+
+def main_bot_is_running():
+
+    if MAIN_PROCESS_ID is None:
+        return True
+    return Path("/proc/" + str(MAIN_PROCESS_ID)).exists()
+
+
+def can_create_bot():
+
+    if PLAYER_NUMBER < TEAM_GOAL:
+        return True
+    if PLAYER_NUMBER == TEAM_GOAL:
+        return not main_bot_is_running()
+    return False
 
 
 def child_is_running():
@@ -60,7 +82,7 @@ def start_new_ai():
 
 def try_create_team_slot(server_connection, inventory, tile):
 
-    if PLAYER_NUMBER >= TEAM_GOAL:
+    if not can_create_bot():
         return False
     if child_is_running() or not can_start_child():
         return False
