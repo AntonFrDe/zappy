@@ -138,6 +138,11 @@ def get_resource_priority():
     return needed_resources + [resource for resource in RESOURCE_PRIORITY if resource not in needed_resources]
 
 
+def get_player_level():
+
+    return PLAYER_LEVEL
+
+
 def update_player_level(response):
 
     global PLAYER_LEVEL
@@ -205,8 +210,6 @@ def try_current_incantation(server_connection, inventory, tile):
     if required_players > 1:
         call = get_call_to_follow()
         if call is None or call[0] != PLAYER_ID:
-            return False
-        if count_ready_players() < required_players - 1:
             return False
     if count_visible_item(tile, "player") < required_players:
         return False
