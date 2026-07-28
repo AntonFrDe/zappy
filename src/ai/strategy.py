@@ -152,6 +152,17 @@ def has_required_stones_for_level(level, inventory, tile):
     return True
 
 
+def get_missing_stones(level, inventory):
+
+    missing_stones = []
+
+    for stone, needed in INCANTATION_STONES.get(level, {}).items():
+        if inventory.get(stone, 0) < needed:
+            missing_stones.append(stone)
+
+    return missing_stones
+
+
 def can_try_level_two(inventory, tile):
 
     if inventory.get("food", 0) < 2:
