@@ -1,83 +1,78 @@
-#include <cmath>
-#include <cstdio>
-#include <fstream>
+#include <SFML/Graphics.hpp>
 #include <vector>
 
 #include "RendererIso.hpp"
 
-static void dumpGridPpm(const std::vector<renderThemeIso::IsoLineSegment> &lines,
-    int mapWidth, int mapHeight, const char *path)
+using renderThemeIso::PixelPos;
+
+namespace {
+
+sf::Vector2f toSfVec(PixelPos p)
 {
-    using renderThemeIso::kIsoTileWidth;
+    return sf::Vector2f(p.x, p.y);
+}
 
-    const int margin = 10;
-    int w = static_cast<int>(static_cast<float>(mapWidth + mapHeight) * kIsoTileWidth / 2.f) + margin * 2;
-    int h = static_cast<int>(static_cast<float>(mapWidth + mapHeight) * kIsoTileWidth / 4.f) + margin * 2;
+struct DemoEntity {
+    const char *name;
+    float tileX, tileY;
+    sf::Color color;
+};
 
-    std::vector<unsigned char> buf(static_cast<std::size_t>(w) * h * 3, 0);
-    auto plot = [&](int x, int y) {
-        if (x < 0 || y < 0 || x >= w || y >= h)
-            return;
-        std::size_t idx = (static_cast<std::size_t>(y) * w + x) * 3;
-        buf[idx] = 90; buf[idx + 1] = 140; buf[idx + 2] = 240;
-    };
-    auto drawLine = [&](float fx0, float fy0, float fx1, float fy1) {
-        int x0 = static_cast<int>(fx0) + margin, y0 = static_cast<int>(fy0) + margin;
-        int x1 = static_cast<int>(fx1) + margin, y1 = static_cast<int>(fy1) + margin;
-        int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-        int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-        int err = dx + dy;
-        while (true) {
-            plot(x0, y0);
-            if (x0 == x1 && y0 == y1)
-                break;
-            int e2 = 2 * err;
-            if (e2 >= dy) { 
-                err += dy;
-                x0 += sx; }
-            if (e2 <= dx) { 
-                err += dx;
-                y0 += sy; }
-        }
-    };
-    for (const auto &seg : lines)
-        drawLine(seg.from.x, seg.from.y, seg.to.x, seg.to.y);
-    std::ofstream out(path, std::ios::binary);
-    out << "P6\n" << w << " " << h << "\n255\n";
-    out.write(reinterpret_cast<char *>(buf.data()), static_cast<std::streamsize>(buf.size()));
 }
 
 int main()
 {
-    using renderThemeIso::PixelPos;
-    using renderThemeIso::isoProject;
-    using renderThemeIso::isoUnproject;
-    using renderThemeIso::tileCenterPx;
-    using renderThemeIso::defaultMapOrigin;
-    using renderThemeIso::buildIsoGridLines;
+    const int mapWidth = 8;
+    const int mapHeight = 6;
 
-    int coords[][2] = { {0, 0}, {5, 0}, {0, 5}, {3, 3}, {9, 4} };
+    PixelPos origin = renderThemeIso::defaultMapOrigin(mapHeight);
+    origin.x += 40.f;
+    origin.y += 40.f;
 
-    std::printf("tuile -> pixel (projection isometrique)\n");
-    for (auto &c : coords) {
-        PixelPos px = tileCenterPx(c[0], c[1]);
-        std::printf("  (%d,%d) -> (%.1f, %.1f)\n", c[0], c[1], px.x, px.y);
+    auto gridLines = renderThemeIso::buildIsoGridLines(mapWidth, mapHeight, origin);
+
+    sf::VertexArray gridVertices(sf::Lines, gridLines.size() * 2);
+    sf::Color gridColor(58, 62, 110);
+    for (std::size_t i = 0; i < gridLines.size(); ++i) {
+        gridVertices[i * 2 + 0] = sf::Vertex(toSfVec(gridLines[i].from), gridColor);
+        gridVertices[i * 2 + 1] = sf::Vertex(toSfVec(gridLines[i].to), gridColor);
     }
-    std::printf("\nverification aller-retour (pixel -> tuile)\n");
-    for (auto &c : coords) {
-        PixelPos px = isoProject(static_cast<float>(c[0]), static_cast<float>(c[1]));
-        PixelPos back = isoUnproject(px.x, px.y);
-        std::printf("  (%d,%d) -> px(%.1f,%.1f) -> (%.3f, %.3f)\n",
-            c[0], c[1], px.x, px.y, back.x, back.y);
-    }
-    int mapWidth = 8;
-    int mapHeight = 6;
-    PixelPos origin = defaultMapOrigin(mapHeight);
-    auto gridLines = buildIsoGridLines(mapWidth, mapHeight, origin);
 
-    std::printf("\ngrille iso %dx%d : %zu segments (attendu %d)\n",
-        mapWidth, mapHeight, gridLines.size(), (mapWidth + 1) + (mapHeight + 1));
-    dumpGridPpm(gridLines, mapWidth, mapHeight, "iso_grid.ppm");
-    std::printf("PPM ecrit dans iso_grid.ppm\n");
+    std::vector<DemoEntity> entities = {
+        {"D", 5.f, 3.f, sf::Color(235, 90, 90)},
+        {"A", 2.f, 1.f, sf::Color(90, 200, 235)},
+        {"C", 4.f, 3.f, sf::Color(235, 200, 90)},
+        {"B", 3.f, 2.f, sf::Color(140, 235, 90)},
+    };
+
+    renderThemeIso::sortByDepth(entities, [](const DemoEntity &e) {
+        return std::pair<float, float>(e.tileX, e.tileY);
+    });
+
+    sf::RenderWindow window(sf::VideoMode(700, 450), "Zappy iso (depth sort)");
+    window.setVerticalSyncEnabled(true);
+
+    while (window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed)
+                window.close();
+        }
+        window.clear(sf::Color(16, 16, 24));
+        window.draw(gridVertices);
+        for (const auto &e : entities) {
+            PixelPos p = renderThemeIso::isoProject(e.tileX + 0.5f, e.tileY + 0.5f, origin);
+            float radius = renderThemeIso::kIsoTileWidth * 0.55f;
+
+            sf::CircleShape disc(radius);
+            disc.setOrigin(radius, radius);
+            disc.setPosition(toSfVec(p));
+            disc.setFillColor(e.color);
+            window.draw(disc);
+        }
+
+        window.display();
+    }
+
     return 0;
 }

@@ -61,4 +61,9 @@ std::vector<IsoLineSegment> buildIsoGridLines(int mapWidth, int mapHeight, Pixel
     }
     return lines;
 }
+
+float depthKey(float tileX, float tileY)
+{
+    return tileX + tileY;
+}
 }
