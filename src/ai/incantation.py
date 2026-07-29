@@ -6,14 +6,24 @@ from strategy import (INCANTATION_STONES,
     can_try_level_two,
     count_visible_item,
     has_required_stones_for_level,)
+from team import PLAYERS_NEEDED_TO_WIN, TEAM_SIZE
 
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
+TEAM_NAME = ""
+TEAM_PLAYERS = {}
 LAST_INCANTATION_CALL = None
+LAST_FOLLOWED_CALL = None
 PLAYER_ID = token_hex(8)
 INCANTATION_CALLS = {}
 READY_PLAYERS = {}
-CALL_LIFETIME = 30
+CALL_LIFETIME = 5
+READY_LIFETIME = 2
+TEAM_STATUS_LIFETIME = 5
+TEAM_STATUS_INTERVAL = 8
+TEAM_STATUS_TURNS = 0
+HELP_MESSAGE_SENT = False
+READY_MESSAGE_SENT = False
 
 
 def send_command_to_server(server_connection, command):
@@ -39,6 +49,7 @@ def remember_incantation_call(message):
     except ValueError:
         return
 
+    payload = payload.strip()
     header_parts = header.split()
     parts = payload.split()
 
@@ -50,6 +61,31 @@ def remember_incantation_call(message):
     direction = int(header_parts[1])
 
     if direction < 0 or direction > 8:
+        return
+
+    message_parts = payload.split("|")
+
+    if len(message_parts) == 4 and message_parts[0] == "team_status":
+        save_team_status(message_parts[1], message_parts[2], message_parts[3])
+        return
+    if len(message_parts) == 4 and message_parts[0] == "incantation_request":
+        if message_parts[1] == TEAM_NAME:
+            save_incantation_call(direction, message_parts[2], message_parts[3])
+        return
+    if len(message_parts) == 5 and message_parts[0] == "incantation_ready":
+        if message_parts[1] == TEAM_NAME:
+            save_ready_player(direction, message_parts[2], message_parts[3], message_parts[4])
+        return
+    if TEAM_NAME:
+        return
+
+    compact_parts = payload.split("_")
+
+    if len(compact_parts) == 4 and compact_parts[:2] == ["incantation", "request"]:
+        save_incantation_call(direction, compact_parts[2], compact_parts[3])
+        return
+    if len(compact_parts) == 5 and compact_parts[:2] == ["incantation", "ready"]:
+        save_ready_player(direction, compact_parts[2], compact_parts[3], compact_parts[4])
         return
 
     if len(parts) == 2 and parts[0] == "incantation":
@@ -91,11 +127,73 @@ def save_ready_player(direction, level_text, caller_id, player_id):
     READY_PLAYERS[player_id] = time.monotonic()
 
 
+def set_team_name(team_name):
+
+    global TEAM_NAME
+
+    TEAM_NAME = team_name
+
+
+def save_team_status(team_name, level_text, player_id):
+
+    if team_name != TEAM_NAME or not level_text.isdigit():
+        return
+    level = int(level_text)
+    if level < 1 or level > 8 or player_id == PLAYER_ID:
+        return
+    TEAM_PLAYERS[player_id] = (level, time.monotonic())
+
+
+def remove_old_team_players():
+
+    now = time.monotonic()
+    old_players = []
+
+    for player_id, status in TEAM_PLAYERS.items():
+        last_status_time = status[1]
+        waiting_time = now - last_status_time
+        if waiting_time > TEAM_STATUS_LIFETIME:
+            old_players.append(player_id)
+
+    for player_id in old_players:
+        del TEAM_PLAYERS[player_id]
+
+
+def count_team_players_at_level(level):
+
+    remove_old_team_players()
+    players = 1
+
+    for player_level, _ in TEAM_PLAYERS.values():
+        if player_level == level:
+            players += 1
+    return players
+
+
+def share_team_status(server_connection):
+
+    global TEAM_STATUS_TURNS
+
+    if not TEAM_NAME:
+        return False
+    TEAM_STATUS_TURNS += 1
+    if TEAM_STATUS_TURNS < TEAM_STATUS_INTERVAL:
+        return False
+    TEAM_STATUS_TURNS = 0
+    message = "team_status|" + TEAM_NAME + "|" + str(PLAYER_LEVEL) + "|" + PLAYER_ID
+    send_command_to_server(server_connection, "Broadcast " + message)
+    return True
+
+
 def reset_incantation_calls():
 
-    global LAST_INCANTATION_CALL
+    global LAST_INCANTATION_CALL, LAST_FOLLOWED_CALL
+    global HELP_MESSAGE_SENT, READY_MESSAGE_SENT
 
     LAST_INCANTATION_CALL = None
+    LAST_FOLLOWED_CALL = None
+    HELP_MESSAGE_SENT = False
+    READY_MESSAGE_SENT = False
     INCANTATION_CALLS.clear()
     READY_PLAYERS.clear()
 
@@ -104,7 +202,12 @@ def remove_old_calls():
 
     now = time.monotonic()
     old_calls = [caller_id for caller_id, call in INCANTATION_CALLS.items() if now - call[2] > CALL_LIFETIME]
-    old_players = [player_id for player_id, last_ready in READY_PLAYERS.items() if now - last_ready > CALL_LIFETIME]
+    old_players = []
+
+    for player_id, last_ready in READY_PLAYERS.items():
+        waiting_time = now - last_ready
+        if waiting_time > READY_LIFETIME:
+            old_players.append(player_id)
 
     for caller_id in old_calls:
         del INCANTATION_CALLS[caller_id]
@@ -131,6 +234,23 @@ def count_ready_players():
     return len(READY_PLAYERS)
 
 
+def call_was_already_followed(caller_id):
+
+    global LAST_FOLLOWED_CALL
+
+    call = INCANTATION_CALLS.get(caller_id)
+
+    if call is None:
+        return False
+
+    current_call = (caller_id, call[2])
+
+    if current_call == LAST_FOLLOWED_CALL:
+        return True
+    LAST_FOLLOWED_CALL = current_call
+    return False
+
+
 def get_resource_priority():
 
     needed_resources = list(INCANTATION_STONES.get(PLAYER_LEVEL, {}).keys())
@@ -141,6 +261,17 @@ def get_resource_priority():
 def get_player_level():
 
     return PLAYER_LEVEL
+
+
+def get_group_size(level):
+
+    minimum_players = INCANTATION_PLAYERS.get(level, 0)
+
+    if minimum_players <= 1:
+        return minimum_players
+    if level == 2:
+        return TEAM_SIZE
+    return PLAYERS_NEEDED_TO_WIN
 
 
 def update_player_level(response):
@@ -206,12 +337,15 @@ def try_current_incantation(server_connection, inventory, tile):
         return False
     if inventory.get("food", 0) < 2:
         return False
-    required_players = INCANTATION_PLAYERS[PLAYER_LEVEL]
-    if required_players > 1:
+    minimum_players = INCANTATION_PLAYERS[PLAYER_LEVEL]
+    group_size = get_group_size(PLAYER_LEVEL)
+    if minimum_players > 1:
         call = get_call_to_follow()
         if call is None or call[0] != PLAYER_ID:
             return False
-    if count_visible_item(tile, "player") < required_players:
+        if count_ready_players() < group_size - 1:
+            return False
+    if count_visible_item(tile, "player") < group_size:
         return False
     if not has_required_stones_for_level(PLAYER_LEVEL, inventory, tile):
         return False
@@ -242,24 +376,40 @@ def has_incantation_help_requirements(inventory, tile, required_players):
 
 def broadcast_incantation_help(server_connection):
 
+    global HELP_MESSAGE_SENT
+
+    if HELP_MESSAGE_SENT:
+        HELP_MESSAGE_SENT = False
+        send_command_to_server(server_connection, "Look")
+        return
+    HELP_MESSAGE_SENT = True
     INCANTATION_CALLS[PLAYER_ID] = (0, PLAYER_LEVEL, time.monotonic())
-    send_command_to_server(server_connection, "Broadcast incantation request " + str(PLAYER_LEVEL) + " " + PLAYER_ID)
+    message = "incantation_request|" + TEAM_NAME + "|" + str(PLAYER_LEVEL) + "|" + PLAYER_ID
+    send_command_to_server(server_connection, "Broadcast " + message)
 
 
 def say_ready_for_incantation(server_connection, caller_id):
 
-    send_command_to_server(server_connection, "Broadcast incantation ready " + str(PLAYER_LEVEL) + " "  + caller_id + " " + PLAYER_ID)
+    global READY_MESSAGE_SENT
+
+    if READY_MESSAGE_SENT:
+        READY_MESSAGE_SENT = False
+        send_command_to_server(server_connection, "Look")
+        return
+    READY_MESSAGE_SENT = True
+    message = "incantation_ready|" + TEAM_NAME + "|" + str(PLAYER_LEVEL) + "|" + caller_id + "|" + PLAYER_ID
+    send_command_to_server(server_connection, "Broadcast " + message)
 
 
 def request_incantation_help(server_connection, inventory, tile):
 
-    required_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
-    if required_players is None or required_players <= 1:
+    minimum_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
+    if minimum_players is None or minimum_players <= 1:
         return False
     call = get_call_to_follow()
     if call is not None and call[0] != PLAYER_ID:
         return False
-    if not has_incantation_help_requirements(inventory, tile, required_players):
+    if not has_incantation_help_requirements(inventory, tile, get_group_size(PLAYER_LEVEL)):
         return False
     broadcast_incantation_help(server_connection)
     return True
@@ -286,6 +436,9 @@ def follow_incantation_call(server_connection, inventory):
         return False
     if level != PLAYER_LEVEL:
         return False
+    if caller_id is not None and call_was_already_followed(caller_id):
+        send_command_to_server(server_connection, "Look")
+        return True
     if direction == 0:
         if caller_id is None:
             send_command_to_server(server_connection, "Look")

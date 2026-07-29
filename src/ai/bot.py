@@ -5,6 +5,7 @@ from incantation import (follow_incantation_call,
     get_player_level,
     get_resource_priority,
     request_incantation_help,
+    share_team_status,
     try_current_incantation,)
 from spawner import try_create_team_slot
 from strategy import (EXPLORATION_FORWARD_TARGETS,
@@ -339,12 +340,14 @@ def run_ai_loop(server_connection):
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
         if keep_player_alive(server_connection, inventory):
             continue
+        if share_team_status(server_connection):
+            continue
         look = send_command_to_server(server_connection, "Look")
         tile = get_current_tile(look)
 
-        if follow_incantation_call(server_connection, inventory):
-            continue
         if try_create_team_slot(server_connection, inventory, tile):
+            continue
+        if follow_incantation_call(server_connection, inventory):
             continue
         if collect_missing_stone(server_connection, inventory, look, tile):
             continue
