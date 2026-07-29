@@ -150,7 +150,7 @@ class TestCountVisibleItem(unittest.TestCase):
 
 class TestChooseExplorationCommand(unittest.TestCase):
     def test_player_takes_priority(self):
-        self.assertEqual(ai.choose_exploration_command(["player", "egg"]), "Right")
+        self.assertEqual(ai.choose_exploration_command(["player", "player", "egg"]), "Right")
 
     def test_egg_takes_priority_over_food(self):
         self.assertEqual(ai.choose_exploration_command(["egg", "food"]), "Left")
@@ -164,10 +164,10 @@ class TestChooseExplorationCommand(unittest.TestCase):
     def test_deraumere_returns_forward(self):
         self.assertEqual(ai.choose_exploration_command(["deraumere"]), "Forward")
 
-    def test_empty_tile_picks_from_left_right(self):
-        with patch.object(ai, "choice", return_value="Left") as choice_mock:
-            self.assertEqual(ai.choose_exploration_command([]), "Left")
-            choice_mock.assert_called_once_with(["Left", "Right"])
+    def test_empty_tile_returns_forward_without_choosing(self):
+        with patch.object(ai, "choice") as choice_mock:
+            self.assertEqual(ai.choose_exploration_command([]), "Forward")
+            choice_mock.assert_not_called()
 
     def test_unknown_tile_picks_from_all_three(self):
         with patch.object(ai, "choice", return_value="Forward") as choice_mock:
