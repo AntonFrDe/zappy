@@ -1,29 +1,78 @@
-#include <cstdio>
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <vector>
 
-#include "RendererIso.hpp"
+#include "../../include/gui/gui.hpp"
+#include "../../include/gui/GameState.hpp"
+#include "../../include/gui/CommandParser.hpp"
+#include "../../include/gui/NetworkClient.hpp"
+#include "IsoView.hpp"
 
-int main()
+int main(int argc, char **argv)
 {
-    using renderThemeIso::PixelPos;
-    using renderThemeIso::isoProject;
-    using renderThemeIso::isoUnproject;
-    using renderThemeIso::tileCenterPx;
+    gui_args_t args;
+    std::string errorMsg;
+    bool helpRequested = false;
 
-    int coords[][2] = { {0, 0}, {5, 0}, {0, 5}, {3, 3}, {9, 4} };
-
-    std::printf("tuile -> pixel (projection isometrique)\n");
-    for (auto &c : coords) {
-        PixelPos px = tileCenterPx(c[0], c[1]);
-        std::printf("  (%d,%d) -> (%.1f, %.1f)\n", c[0], c[1], px.x, px.y);
+    if (!parseArgs(argc, argv, args, errorMsg, helpRequested)) {
+        if (helpRequested) {
+            printUsage(argv[0]);
+            return 0;
+        }
+        if (!errorMsg.empty())
+            std::cerr << errorMsg << std::endl;
+        printUsage(argv[0]);
+        return 84;
     }
 
-    std::printf("\nverification aller-retour (pixel -> tuile)\n");
-    for (auto &c : coords) {
-        PixelPos px = isoProject(static_cast<float>(c[0]), static_cast<float>(c[1]));
-        PixelPos back = isoUnproject(px.x, px.y);
-        std::printf("  (%d,%d) -> px(%.1f,%.1f) -> (%.3f, %.3f)\n",
-            c[0], c[1], px.x, px.y, back.x, back.y);
+    std::cout << "Connexion a " << args.host << ":" << args.port << "..." << std::endl;
+    NetworkClient network;
+    if (!network.connectToServer(args.host, args.port, errorMsg)) {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    if (!network.performHandshake(errorMsg)) {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    std::cout << "Connecte au serveur, handshake reussi." << std::endl;
+
+    GameState state;
+    int width, height;
+    if (!network.readInitialMapSize(width, height, errorMsg)) {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    state.resizeMap(width, height);
+    std::cout << "Taille de la map: " << width << "x" << height << std::endl;
+
+    CommandParser parser(state);
+    IsoGridCache grid;
+    grid.rebuildIfNeeded(width, height);
+    sf::RenderWindow window(sf::VideoMode(900, 650), "Zappy iso");
+    window.setVerticalSyncEnabled(true);
+
+    std::vector<std::string> lines;
+
+    while (network.isConnected() && window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed)
+                window.close();
+        }
+        if (!network.receiveLines(lines, errorMsg)) {
+            std::cerr << "[network] " << errorMsg << std::endl;
+            break;
+        }
+        for (const std::string &line : lines)
+            parser.dispatch(line);
+
+        grid.rebuildIfNeeded(state.mapWidth, state.mapHeight);
+        window.clear(sf::Color(16, 16, 24));
+        drawState(window, state, grid);
+        window.display();
     }
 
+    std::cout << "Deconnexion du serveur." << std::endl;
     return 0;
 }

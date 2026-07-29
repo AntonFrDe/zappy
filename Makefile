@@ -51,11 +51,14 @@ CRITERION_LDLIBS=	-L$(CRITERION_DIR)/lib -Wl,-rpath,$(CRITERION_DIR)/lib -lcrite
 BONUS_NAME	=	zappy_bonus
 BONUS_SRC_DIR	=	src/bonus
 BONUS_SRC	=	$(wildcard $(BONUS_SRC_DIR)/*.cpp)
-BONUS_OBJ	=	$(BONUS_SRC:.cpp=.o)
+GUI_BONUS_SRC		=	$(filter-out $(GUI_SRC_DIR)/main.cpp, $(wildcard $(GUI_SRC_DIR)/*.cpp))
+
+BONUS_ALL_SRC	=	$(BONUS_SRC) $(GUI_BONUS_SRC)
+BONUS_OBJ	=	$(BONUS_ALL_SRC:.cpp=.o)
+
 BONUS_INC_DIR	=	include/gui
 BONUS_CFLAGS	=	-Wall -Wextra -I. -I$(BONUS_INC_DIR)
 BONUS_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
-
 TESTS_NAME	=	tests_server
 
 TESTS_SRC_DIR	=	tests/server
