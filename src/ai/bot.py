@@ -2,6 +2,7 @@ from random import choice
 
 from client import send_command_to_server
 from incantation import (follow_incantation_call,
+    advance_coordination_turn,
     get_player_level,
     get_resource_priority,
     INCANTATION_LEADER_FOOD_RESERVE,
@@ -39,9 +40,9 @@ from strategy import (EXPLORATION_FORWARD_TARGETS,
     should_turn_on_busy_tile,
     should_wait_before_incantation,)
 
-SURVIVAL_FOOD_LIMIT = 5
-SURVIVAL_FOOD_TARGET = 6
-FOOD_RESERVE_TARGET = 8
+SURVIVAL_FOOD_LIMIT = 8
+SURVIVAL_FOOD_TARGET = 12
+FOOD_RESERVE_TARGET = SURVIVAL_FOOD_TARGET
 SURVIVAL_CONNECTIONS = set()
 SURVIVAL_FORWARD_PENDING = set()
 SURVIVAL_PATHS = {}
@@ -86,35 +87,12 @@ def keep_player_alive(server_connection, inventory=None):
         send_command_to_server(server_connection, "Forward")
         return True
 
-    if was_surviving:
-        if send_command_to_server(server_connection, "Take food") == "ok":
-            return True
-        if food >= INCANTATION_LEADER_FOOD_RESERVE and is_incantation_leader():
-            look = send_command_to_server(server_connection, "Look")
-            tile = get_current_tile(look)
-            for stone in get_missing_stones(get_player_level(), inventory):
-                if stone in tile:
-                    send_command_to_server(server_connection, "Take " + stone)
-                    return True
-            direction = choose_direction_toward_item(look, "food")
-            if direction is not None:
-                if direction in ("Left", "Right"):
-                    SURVIVAL_FORWARD_PENDING.add(server_connection)
-                send_command_to_server(server_connection, direction)
-                return True
-        send_command_to_server(server_connection, next_survival_move(server_connection))
-        return True
-
     look = send_command_to_server(server_connection, "Look")
     tile = get_current_tile(look)
 
     if "food" in tile:
         SURVIVAL_FORWARD_PENDING.discard(server_connection)
-        food_to_take = min(count_visible_item(tile, "food"),
-            SURVIVAL_FOOD_TARGET - food)
-        for _ in range(food_to_take):
-            if send_command_to_server(server_connection, "Take food") != "ok":
-                break
+        send_command_to_server(server_connection, "Take food")
         return True
 
     direction = choose_direction_toward_item(look, "food")
@@ -373,6 +351,9 @@ def run_ai_loop(server_connection):
 
     while True:
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+        advance_coordination_turn()
+        if keep_player_alive(server_connection, inventory):
+            continue
         if follow_incantation_call(server_connection, inventory):
             continue
         look = None
@@ -385,8 +366,6 @@ def run_ai_loop(server_connection):
                 continue
             if request_incantation_help(server_connection, inventory, tile):
                 continue
-        if keep_player_alive(server_connection, inventory):
-            continue
         if share_team_status(server_connection):
             continue
         if look is None:

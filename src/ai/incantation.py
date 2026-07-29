@@ -1,4 +1,3 @@
-import time
 from secrets import token_hex
 
 from strategy import (INCANTATION_STONES,
@@ -6,7 +5,6 @@ from strategy import (INCANTATION_STONES,
     can_try_level_two,
     count_visible_item,
     has_required_stones_for_level,)
-from team import PLAYERS_NEEDED_TO_WIN
 
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
@@ -17,15 +15,23 @@ LAST_FOLLOWED_CALL = None
 PLAYER_ID = token_hex(8)
 INCANTATION_CALLS = {}
 READY_PLAYERS = {}
-CALL_LIFETIME = 5
-READY_LIFETIME = 2
-TEAM_STATUS_LIFETIME = 5
+CALL_LIFETIME_TURNS = 24
+READY_LIFETIME_TURNS = 24
+TEAM_STATUS_LIFETIME_TURNS = 32
 TEAM_STATUS_INTERVAL = 8
-INCANTATION_LEADER_FOOD_RESERVE = 4
-INCANTATION_FOLLOWER_FOOD_RESERVE = 4
+INCANTATION_LEADER_FOOD_RESERVE = 9
+INCANTATION_FOLLOWER_FOOD_RESERVE = 9
 TEAM_STATUS_TURNS = 0
 HELP_MESSAGE_SENT = False
 READY_MESSAGE_SENT = False
+COORDINATION_TURN = 0
+
+
+def advance_coordination_turn():
+
+    global COORDINATION_TURN
+
+    COORDINATION_TURN += 1
 
 
 def send_command_to_server(server_connection, command):
@@ -112,7 +118,7 @@ def save_incantation_call(direction, level_text, caller_id):
 
     if level != PLAYER_LEVEL:
         return
-    INCANTATION_CALLS[caller_id] = (direction, level, time.monotonic())
+    INCANTATION_CALLS[caller_id] = (direction, level, COORDINATION_TURN)
 
 
 def save_ready_player(direction, level_text, caller_id, player_id):
@@ -126,7 +132,7 @@ def save_ready_player(direction, level_text, caller_id, player_id):
         return
     if direction != 0:
         return
-    READY_PLAYERS[player_id] = time.monotonic()
+    READY_PLAYERS[player_id] = COORDINATION_TURN
 
 
 def set_team_name(team_name):
@@ -143,18 +149,17 @@ def save_team_status(team_name, level_text, player_id):
     level = int(level_text)
     if level < 1 or level > 8 or player_id == PLAYER_ID:
         return
-    TEAM_PLAYERS[player_id] = (level, time.monotonic())
+    TEAM_PLAYERS[player_id] = (level, COORDINATION_TURN)
 
 
 def remove_old_team_players():
 
-    now = time.monotonic()
     old_players = []
 
     for player_id, status in TEAM_PLAYERS.items():
-        last_status_time = status[1]
-        waiting_time = now - last_status_time
-        if waiting_time > TEAM_STATUS_LIFETIME:
+        last_status_turn = status[1]
+        waiting_turns = COORDINATION_TURN - last_status_turn
+        if waiting_turns > TEAM_STATUS_LIFETIME_TURNS:
             old_players.append(player_id)
 
     for player_id in old_players:
@@ -213,13 +218,13 @@ def reset_incantation_calls():
 
 def remove_old_calls():
 
-    now = time.monotonic()
-    old_calls = [caller_id for caller_id, call in INCANTATION_CALLS.items() if now - call[2] > CALL_LIFETIME]
+    old_calls = [caller_id for caller_id, call in INCANTATION_CALLS.items()
+        if COORDINATION_TURN - call[2] > CALL_LIFETIME_TURNS]
     old_players = []
 
     for player_id, last_ready in READY_PLAYERS.items():
-        waiting_time = now - last_ready
-        if waiting_time > READY_LIFETIME:
+        waiting_turns = COORDINATION_TURN - last_ready
+        if waiting_turns > READY_LIFETIME_TURNS:
             old_players.append(player_id)
 
     for caller_id in old_calls:
@@ -278,11 +283,7 @@ def get_player_level():
 
 def get_group_size(level):
 
-    minimum_players = INCANTATION_PLAYERS.get(level, 0)
-
-    if minimum_players <= 1:
-        return minimum_players
-    return PLAYERS_NEEDED_TO_WIN
+    return INCANTATION_PLAYERS.get(level, 0)
 
 
 def update_player_level(response):
@@ -394,7 +395,7 @@ def broadcast_incantation_help(server_connection):
         send_command_to_server(server_connection, "Look")
         return
     HELP_MESSAGE_SENT = True
-    INCANTATION_CALLS[PLAYER_ID] = (0, PLAYER_LEVEL, time.monotonic())
+    INCANTATION_CALLS[PLAYER_ID] = (0, PLAYER_LEVEL, COORDINATION_TURN)
     message = "incantation_request|" + TEAM_NAME + "|" + str(PLAYER_LEVEL) + "|" + PLAYER_ID
     send_command_to_server(server_connection, "Broadcast " + message)
 
