@@ -6,3 +6,5 @@ tests_gui
 *.o
 zappy_bonus
 compile_commands.json
+__pycache__/
+*.pyc
