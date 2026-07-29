@@ -6,7 +6,7 @@ from strategy import (INCANTATION_STONES,
     can_try_level_two,
     count_visible_item,
     has_required_stones_for_level,)
-from team import PLAYERS_NEEDED_TO_WIN, TEAM_SIZE
+from team import PLAYERS_NEEDED_TO_WIN
 
 PLAYER_LEVEL = 1
 INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
@@ -21,6 +21,8 @@ CALL_LIFETIME = 5
 READY_LIFETIME = 2
 TEAM_STATUS_LIFETIME = 5
 TEAM_STATUS_INTERVAL = 8
+INCANTATION_LEADER_FOOD_RESERVE = 4
+INCANTATION_FOLLOWER_FOOD_RESERVE = 4
 TEAM_STATUS_TURNS = 0
 HELP_MESSAGE_SENT = False
 READY_MESSAGE_SENT = False
@@ -170,6 +172,17 @@ def count_team_players_at_level(level):
     return players
 
 
+def is_incantation_leader():
+
+    remove_old_team_players()
+    same_level_ids = [PLAYER_ID]
+
+    for player_id, status in TEAM_PLAYERS.items():
+        if status[0] == PLAYER_LEVEL:
+            same_level_ids.append(player_id)
+    return PLAYER_ID == min(same_level_ids)
+
+
 def share_team_status(server_connection):
 
     global TEAM_STATUS_TURNS
@@ -269,8 +282,6 @@ def get_group_size(level):
 
     if minimum_players <= 1:
         return minimum_players
-    if level == 2:
-        return TEAM_SIZE
     return PLAYERS_NEEDED_TO_WIN
 
 
@@ -365,7 +376,7 @@ def try_current_incantation(server_connection, inventory, tile):
 
 def has_incantation_help_requirements(inventory, tile, required_players):
 
-    if inventory.get("food", 0) < 4:
+    if inventory.get("food", 0) < INCANTATION_LEADER_FOOD_RESERVE:
         return False
     enough_players = (count_ready_players() >= required_players - 1
         and count_visible_item(tile, "player") >= required_players)
@@ -406,6 +417,8 @@ def request_incantation_help(server_connection, inventory, tile):
     minimum_players = INCANTATION_PLAYERS.get(PLAYER_LEVEL)
     if minimum_players is None or minimum_players <= 1:
         return False
+    if not is_incantation_leader():
+        return False
     call = get_call_to_follow()
     if call is not None and call[0] != PLAYER_ID:
         return False
@@ -432,7 +445,7 @@ def follow_incantation_call(server_connection, inventory):
             return False
         direction, level = call
 
-    if inventory.get("food", 0) < 3:
+    if inventory.get("food", 0) < INCANTATION_FOLLOWER_FOOD_RESERVE:
         return False
     if level != PLAYER_LEVEL:
         return False
