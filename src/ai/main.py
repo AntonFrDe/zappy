@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import socket
 import sys
 from pathlib import Path
@@ -30,8 +31,7 @@ def _export_functions(module, excluded=()):
             continue
         if not isinstance(function, _FunctionType) or function.__module__ != module.__name__:
             continue
-        exported_function = _FunctionType(function.__code__, globals(), name,
-            function.__defaults__, function.__closure__)
+        exported_function = _FunctionType(function.__code__, globals(), name, function.__defaults__, function.__closure__)
         exported_function.__kwdefaults__ = function.__kwdefaults__
         exported_function.__annotations__ = function.__annotations__
         globals()[name] = exported_function
@@ -88,8 +88,10 @@ def read_settings():
     port = read_number("-p", None, 1, 65535)
     team = read_text("-n")
     host = read_text("-h", "localhost")
-    player_number = read_number("-i", "1", 1, TEAM_GOAL)
-    return host, port, team, player_number
+    player_number = read_number("-i", "1", 1, BACKUP_PLAYER_NUMBER)
+    main_process_id = read_number("--main-pid", str(os.getpid()), 1, sys.maxsize)
+
+    return host, port, team, player_number, main_process_id
 
 
 def main():
@@ -98,9 +100,10 @@ def main():
         print_usage()
         return
 
-    host, port, team, player_number = read_settings()
+    host, port, team, player_number, main_process_id = read_settings()
 
-    set_start_command(host, port, team, player_number)
+    set_team_name(team)
+    set_start_command(host, port, team, player_number, main_process_id)
     try:
         server_connection = socket.create_connection((host, port), timeout=CONNECT_WAIT)
     except OSError:
