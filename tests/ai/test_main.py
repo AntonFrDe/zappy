@@ -128,13 +128,11 @@ class TestKeepPlayerAlive(unittest.TestCase):
             self.assertEqual(calls, ["Inventory", "Look", "Take food"])
 
     def test_moves_when_no_food_visible(self):
-        responses = iter(["[food 2]", "[linemate 1]", "ok"])
-        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)) as sent, \
-             patch.object(ai, "choice", return_value="Left") as choice_mock:
+        responses = iter(["[food 2]", "[linemate,,,]", "ok"])
+        with patch.object(ai, "send_command_to_server", side_effect=lambda _c, _cmd: next(responses)) as sent:
             self.assertTrue(ai.keep_player_alive(MagicMock()))
             calls = [call.args[1] for call in sent.call_args_list]
-            self.assertEqual(calls, ["Inventory", "Look", "Left"])
-            choice_mock.assert_called_once_with(["Forward", "Left", "Right"])
+            self.assertEqual(calls, ["Inventory", "Look", "Forward"])
 
 
 class TestCountVisibleItem(unittest.TestCase):
