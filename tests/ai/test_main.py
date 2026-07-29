@@ -484,10 +484,10 @@ class TestTurnOnEmptyTile(unittest.TestCase):
             self.assertFalse(ai.turn_on_empty_tile(MagicMock(), ["food"]))
             sent.assert_not_called()
 
-    def test_empty_tile_turns_right(self):
+    def test_empty_tile_moves_forward(self):
         with patch.object(ai, "send_command_to_server") as sent:
             self.assertTrue(ai.turn_on_empty_tile(MagicMock(), []))
-            sent.assert_called_once_with(unittest.mock.ANY, "Right")
+            sent.assert_called_once_with(unittest.mock.ANY, "Forward")
 
 
 class TestSholdMoveAfterLook(unittest.TestCase):
