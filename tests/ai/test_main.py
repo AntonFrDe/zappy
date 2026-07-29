@@ -279,7 +279,7 @@ class TestShouldFollowEgg(unittest.TestCase):
 
 class TestShouldCheckInventory(unittest.TestCase):
     def test_player_without_food_returns_true(self):
-        self.assertTrue(ai.should_check_inventory(["player"]))
+        self.assertTrue(ai.should_check_inventory(["player", "player"]))
 
     def test_player_with_food_returns_false(self):
         self.assertFalse(ai.should_check_inventory(["player", "food"]))
@@ -293,7 +293,7 @@ class TestShouldTurnOnBusyTile(unittest.TestCase):
         self.assertTrue(ai.should_turn_on_busy_tile(["food", "linemate", "sibur", "egg", "player"]))
 
     def test_player_and_more_than_two_items_returns_true(self):
-        self.assertTrue(ai.should_turn_on_busy_tile(["player", "food", "egg"]))
+        self.assertTrue(ai.should_turn_on_busy_tile(["player", "player", "food", "egg"]))
 
     def test_sparse_tile_returns_false(self):
         self.assertFalse(ai.should_turn_on_busy_tile(["food"]))
@@ -321,7 +321,7 @@ class TestShouldTakeDeraumereFirst(unittest.TestCase):
         self.assertFalse(ai.should_take_deraumere_first(["deraumere", "food"], {"food": 2}))
 
     def test_player_present_returns_false(self):
-        self.assertFalse(ai.should_take_deraumere_first(["deraumere", "player"], {}))
+        self.assertFalse(ai.should_take_deraumere_first(["deraumere", "player", "player"], {}))
 
     def test_clear_tile_returns_true(self):
         self.assertTrue(ai.should_take_deraumere_first(["deraumere"], {"deraumere": 1}))
@@ -335,7 +335,7 @@ class TestShouldTakeSiburFirst(unittest.TestCase):
         self.assertFalse(ai.should_take_sibur_first(["sibur"], {"sibur": 2}))
 
     def test_player_present_returns_false(self):
-        self.assertFalse(ai.should_take_sibur_first(["sibur", "player"], {}))
+        self.assertFalse(ai.should_take_sibur_first(["sibur", "player", "player"], {}))
 
     def test_clear_tile_returns_true(self):
         self.assertTrue(ai.should_take_sibur_first(["sibur"], {}))
@@ -349,7 +349,7 @@ class TestShouldTakeMendianeFirst(unittest.TestCase):
         self.assertFalse(ai.should_take_mendiane_first(["mendiane"], {"mendiane": 2}))
 
     def test_player_present_returns_false(self):
-        self.assertFalse(ai.should_take_mendiane_first(["mendiane", "player"], {}))
+        self.assertFalse(ai.should_take_mendiane_first(["mendiane", "player", "player"], {}))
 
     def test_clear_tile_returns_true(self):
         self.assertTrue(ai.should_take_mendiane_first(["mendiane"], {}))
@@ -374,7 +374,7 @@ class TestShouldTakeThystameFirst(unittest.TestCase):
         self.assertFalse(ai.should_take_thystame_first(["thystame"], {"thystame": 1}))
 
     def test_player_present_returns_false(self):
-        self.assertFalse(ai.should_take_thystame_first(["thystame", "player"], {}))
+        self.assertFalse(ai.should_take_thystame_first(["thystame", "player", "player"], {}))
 
     def test_clear_tile_returns_true(self):
         self.assertTrue(ai.should_take_thystame_first(["thystame"], {}))
@@ -385,14 +385,14 @@ class TestShouldAvoidBusyResourceTile(unittest.TestCase):
         self.assertFalse(ai.should_avoid_busy_resource_tile(["linemate"]))
 
     def test_player_with_linemate_returns_true(self):
-        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "linemate"]))
+        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "player", "linemate"]))
 
     def test_player_with_deraumere_returns_true(self):
-        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "deraumere"]))
+        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "player", "deraumere"]))
 
     def test_player_with_sibur_or_mendiane_returns_true(self):
-        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "sibur"]))
-        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "mendiane"]))
+        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "player", "sibur"]))
+        self.assertTrue(ai.should_avoid_busy_resource_tile(["player", "player", "mendiane"]))
 
     def test_player_alone_returns_false(self):
         self.assertFalse(ai.should_avoid_busy_resource_tile(["player"]))
