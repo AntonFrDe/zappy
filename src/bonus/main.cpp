@@ -1,78 +1,78 @@
 #include <SFML/Graphics.hpp>
+#include <iostream>
 #include <vector>
 
-#include "RendererIso.hpp"
+#include "../../include/gui/gui.hpp"
+#include "../../include/gui/GameState.hpp"
+#include "../../include/gui/CommandParser.hpp"
+#include "../../include/gui/NetworkClient.hpp"
+#include "IsoView.hpp"
 
-using renderThemeIso::PixelPos;
-
-namespace {
-
-sf::Vector2f toSfVec(PixelPos p)
+int main(int argc, char **argv)
 {
-    return sf::Vector2f(p.x, p.y);
-}
+    gui_args_t args;
+    std::string errorMsg;
+    bool helpRequested = false;
 
-struct DemoEntity {
-    const char *name;
-    float tileX, tileY;
-    sf::Color color;
-};
-
-}
-
-int main()
-{
-    const int mapWidth = 8;
-    const int mapHeight = 6;
-
-    PixelPos origin = renderThemeIso::defaultMapOrigin(mapHeight);
-    origin.x += 40.f;
-    origin.y += 40.f;
-
-    auto gridLines = renderThemeIso::buildIsoGridLines(mapWidth, mapHeight, origin);
-
-    sf::VertexArray gridVertices(sf::Lines, gridLines.size() * 2);
-    sf::Color gridColor(58, 62, 110);
-    for (std::size_t i = 0; i < gridLines.size(); ++i) {
-        gridVertices[i * 2 + 0] = sf::Vertex(toSfVec(gridLines[i].from), gridColor);
-        gridVertices[i * 2 + 1] = sf::Vertex(toSfVec(gridLines[i].to), gridColor);
+    if (!parseArgs(argc, argv, args, errorMsg, helpRequested)) {
+        if (helpRequested) {
+            printUsage(argv[0]);
+            return 0;
+        }
+        if (!errorMsg.empty())
+            std::cerr << errorMsg << std::endl;
+        printUsage(argv[0]);
+        return 84;
     }
 
-    std::vector<DemoEntity> entities = {
-        {"D", 5.f, 3.f, sf::Color(235, 90, 90)},
-        {"A", 2.f, 1.f, sf::Color(90, 200, 235)},
-        {"C", 4.f, 3.f, sf::Color(235, 200, 90)},
-        {"B", 3.f, 2.f, sf::Color(140, 235, 90)},
-    };
+    std::cout << "Connexion a " << args.host << ":" << args.port << "..." << std::endl;
+    NetworkClient network;
+    if (!network.connectToServer(args.host, args.port, errorMsg)) {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    if (!network.performHandshake(errorMsg)) {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    std::cout << "Connecte au serveur, handshake reussi." << std::endl;
 
-    renderThemeIso::sortByDepth(entities, [](const DemoEntity &e) {
-        return std::pair<float, float>(e.tileX, e.tileY);
-    });
+    GameState state;
+    int width, height;
+    if (!network.readInitialMapSize(width, height, errorMsg)) {
+        std::cerr << errorMsg << std::endl;
+        return 84;
+    }
+    state.resizeMap(width, height);
+    std::cout << "Taille de la map: " << width << "x" << height << std::endl;
 
-    sf::RenderWindow window(sf::VideoMode(700, 450), "Zappy iso (depth sort)");
+    CommandParser parser(state);
+    IsoGridCache grid;
+    grid.rebuildIfNeeded(width, height);
+    sf::RenderWindow window(sf::VideoMode(900, 650), "Zappy iso");
     window.setVerticalSyncEnabled(true);
 
-    while (window.isOpen()) {
+    std::vector<std::string> lines;
+
+    while (network.isConnected() && window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed)
                 window.close();
         }
-        window.clear(sf::Color(16, 16, 24));
-        window.draw(gridVertices);
-        for (const auto &e : entities) {
-            PixelPos p = renderThemeIso::isoProject(e.tileX + 0.5f, e.tileY + 0.5f, origin);
-            float radius = renderThemeIso::kIsoTileWidth * 0.55f;
-
-            sf::CircleShape disc(radius);
-            disc.setOrigin(radius, radius);
-            disc.setPosition(toSfVec(p));
-            disc.setFillColor(e.color);
-            window.draw(disc);
+        if (!network.receiveLines(lines, errorMsg)) {
+            std::cerr << "[network] " << errorMsg << std::endl;
+            break;
         }
+        for (const std::string &line : lines)
+            parser.dispatch(line);
 
+        grid.rebuildIfNeeded(state.mapWidth, state.mapHeight);
+        window.clear(sf::Color(16, 16, 24));
+        drawState(window, state, grid);
         window.display();
     }
 
+    std::cout << "Deconnexion du serveur." << std::endl;
     return 0;
 }
