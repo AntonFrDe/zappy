@@ -2,8 +2,13 @@ from random import choice
 
 from client import send_command_to_server
 from incantation import (follow_incantation_call,
+    advance_coordination_turn,
+    get_player_level,
     get_resource_priority,
+    INCANTATION_LEADER_FOOD_RESERVE,
+    is_incantation_leader,
     request_incantation_help,
+    share_team_status,
     try_current_incantation,)
 from spawner import try_create_team_slot
 from strategy import (EXPLORATION_FORWARD_TARGETS,
@@ -13,6 +18,8 @@ from strategy import (EXPLORATION_FORWARD_TARGETS,
     count_visible_item,
     get_current_tile,
     get_guarded_resource_to_take,
+    get_missing_stones,
+    has_required_stones_for_level,
     parse_inventory_response,
     should_avoid_busy_resource_tile,
     should_check_inventory,
@@ -34,11 +41,10 @@ from strategy import (EXPLORATION_FORWARD_TARGETS,
     should_wait_before_incantation,)
 
 SURVIVAL_FOOD_LIMIT = 8
-SURVIVAL_FOOD_TARGET = 20
-SURVIVAL_INVENTORY_INTERVAL = 5
+SURVIVAL_FOOD_TARGET = 12
+FOOD_RESERVE_TARGET = SURVIVAL_FOOD_TARGET
 SURVIVAL_CONNECTIONS = set()
 SURVIVAL_FORWARD_PENDING = set()
-SURVIVAL_ACTIONS_SINCE_INVENTORY = {}
 SURVIVAL_PATHS = {}
 
 
@@ -57,39 +63,28 @@ def next_survival_move(server_connection):
     return "Right"
 
 
-def keep_player_alive(server_connection):
+def keep_player_alive(server_connection, inventory=None):
 
     was_surviving = server_connection in SURVIVAL_CONNECTIONS
-    actions = SURVIVAL_ACTIONS_SINCE_INVENTORY.get(server_connection, SURVIVAL_INVENTORY_INTERVAL)
-    should_check_inventory = (not was_surviving or actions >= SURVIVAL_INVENTORY_INTERVAL)
-    food = None
+    if inventory is None:
+        response = send_command_to_server(server_connection, "Inventory")
+        inventory = parse_inventory_response(response)
+    food = inventory.get("food", 0)
 
-    if should_check_inventory:
-        inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
-        food = inventory.get("food", 0)
-        SURVIVAL_ACTIONS_SINCE_INVENTORY[server_connection] = 0
-
-    if not was_surviving and food is not None and food > SURVIVAL_FOOD_LIMIT:
+    if not was_surviving and food > SURVIVAL_FOOD_LIMIT:
         return False
 
-    if food is not None and food >= SURVIVAL_FOOD_TARGET:
+    if food >= SURVIVAL_FOOD_TARGET:
         SURVIVAL_CONNECTIONS.discard(server_connection)
         SURVIVAL_FORWARD_PENDING.discard(server_connection)
-        SURVIVAL_ACTIONS_SINCE_INVENTORY.pop(server_connection, None)
         SURVIVAL_PATHS.pop(server_connection, None)
         return False
 
     SURVIVAL_CONNECTIONS.add(server_connection)
-    SURVIVAL_ACTIONS_SINCE_INVENTORY[server_connection] = (SURVIVAL_ACTIONS_SINCE_INVENTORY.get(server_connection, 0) + 1)
 
     if server_connection in SURVIVAL_FORWARD_PENDING:
         SURVIVAL_FORWARD_PENDING.discard(server_connection)
         send_command_to_server(server_connection, "Forward")
-        return True
-
-    if was_surviving:
-        send_command_to_server(server_connection, "Take food")
-        send_command_to_server(server_connection, next_survival_move(server_connection))
         return True
 
     look = send_command_to_server(server_connection, "Look")
@@ -97,9 +92,7 @@ def keep_player_alive(server_connection):
 
     if "food" in tile:
         SURVIVAL_FORWARD_PENDING.discard(server_connection)
-        for _ in range(count_visible_item(tile, "food")):
-            if send_command_to_server(server_connection, "Take food") != "ok":
-                break
+        send_command_to_server(server_connection, "Take food")
         return True
 
     direction = choose_direction_toward_item(look, "food")
@@ -109,8 +102,7 @@ def keep_player_alive(server_connection):
         send_command_to_server(server_connection, direction)
         return True
 
-    move = "Forward" if was_surviving else choice(SURVIVAL_MOVES)
-    send_command_to_server(server_connection, move)
+    send_command_to_server(server_connection, next_survival_move(server_connection))
 
     return True
 
@@ -124,6 +116,44 @@ def collect_visible_resource(server_connection, tile):
             return True
 
     return False
+
+
+def collect_missing_stone(server_connection, inventory, look, tile):
+
+    missing_stones = get_missing_stones(get_player_level(), inventory)
+
+    for stone in missing_stones:
+        if stone in tile:
+            send_command_to_server(server_connection, "Take " + stone)
+            return True
+
+    for stone in missing_stones:
+        if move_toward_visible_item(server_connection, look, stone):
+            return True
+
+    return False
+
+
+def move_toward_visible_item(server_connection, look, item):
+
+    direction = choose_direction_toward_item(look, item)
+
+    if direction is None:
+        return False
+    send_command_to_server(server_connection, direction)
+    if direction in ("Left", "Right"):
+        send_command_to_server(server_connection, "Forward")
+    return True
+
+
+def collect_visible_food_reserve(server_connection, inventory, look, tile):
+
+    if inventory.get("food", 0) >= FOOD_RESERVE_TARGET:
+        return False
+    if "food" in tile:
+        send_command_to_server(server_connection, "Take food")
+        return True
+    return move_toward_visible_item(server_connection, look, "food")
 
 
 def choose_exploration_command(tile):
@@ -208,12 +238,9 @@ def move_toward_missing_item(server_connection, inventory, look, resource, count
 
     if inventory.get(resource, 0) >= count or resource not in look:
         return False
-    direction = "Forward"
     if isinstance(look, str):
-        direction = choose_direction_toward_item(look, resource)
-        if direction is None:
-            return False
-    send_command_to_server(server_connection, direction)
+        return move_toward_visible_item(server_connection, look, resource)
+    send_command_to_server(server_connection, "Forward")
     return True
 
 
@@ -323,15 +350,36 @@ def handle_early_resource_step(server_connection, inventory, tile):
 def run_ai_loop(server_connection):
 
     while True:
-        if keep_player_alive(server_connection):
-            continue
-        look = send_command_to_server(server_connection, "Look")
-        tile = get_current_tile(look)
-
         inventory = parse_inventory_response(send_command_to_server(server_connection, "Inventory"))
+        advance_coordination_turn()
+        if keep_player_alive(server_connection, inventory):
+            continue
         if follow_incantation_call(server_connection, inventory):
             continue
+        look = None
+        tile = None
+        if (inventory.get("food", 0) >= INCANTATION_LEADER_FOOD_RESERVE
+                and has_required_stones_for_level(get_player_level(), inventory, [])):
+            look = send_command_to_server(server_connection, "Look")
+            tile = get_current_tile(look)
+            if try_current_incantation(server_connection, inventory, tile):
+                continue
+            if request_incantation_help(server_connection, inventory, tile):
+                continue
+        if share_team_status(server_connection):
+            continue
+        if look is None:
+            look = send_command_to_server(server_connection, "Look")
+            tile = get_current_tile(look)
+
         if try_create_team_slot(server_connection, inventory, tile):
+            continue
+        if collect_visible_food_reserve(server_connection, inventory, look, tile):
+            continue
+        if get_player_level() > 1 and not is_incantation_leader():
+            send_command_to_server(server_connection, choose_exploration_command(tile))
+            continue
+        if collect_missing_stone(server_connection, inventory, look, tile):
             continue
         if prepare_incantation_step(server_connection, inventory, look, tile):
             continue
@@ -344,8 +392,6 @@ def run_ai_loop(server_connection):
         if turn_on_empty_tile(server_connection, tile):
             continue
         if move_when_food_is_low(server_connection, inventory, tile):
-            continue
-        if if_low_food_seek_food(server_connection, inventory, tile):
             continue
         if avoid_crowded_tile_step(server_connection, tile):
             continue

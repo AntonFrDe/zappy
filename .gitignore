@@ -4,3 +4,5 @@ zappy_ai
 tests_server
 tests_gui
 *.o
+zappy_bonus
+compile_commands.json

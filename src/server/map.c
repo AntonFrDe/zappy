@@ -172,7 +172,12 @@ int map_direction(map_t *map, int64_t from_x, int64_t from_y,
     if (dx == 0 && dy == 0)
         return 0;
     rotate_to_frame(from_orientation, dx, dy, &rx, &ry);
-    angle = atan2((double)rx, (double)-ry) * (180.0 / M_PI);
+    /*
+     * The protocol numbers directions counter-clockwise: 1 is in front,
+     * 3 is on the left, 5 is behind and 7 is on the right.  rx is positive
+     * on the player's right, hence the minus sign here.
+     */
+    angle = atan2((double)-rx, (double)-ry) * (180.0 / M_PI);
     if (angle < 0)
         angle += 360.0;
     return (int)((angle + 22.5) / 45.0) % 8 + 1;
