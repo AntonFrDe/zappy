@@ -62,6 +62,21 @@ std::vector<IsoLineSegment> buildIsoGridLines(int mapWidth, int mapHeight, Pixel
     return lines;
 }
 
+PixelPos resourceSlotOffsetPx(int resourceIndex)
+{
+    constexpr float dx = kIsoTileWidth * 0.16f;
+    constexpr float dy = kIsoTileHeight * 0.22f;
+    static constexpr PixelPos offsets[7] = {
+        {-dx, -dy}, {0.f, -dy}, {dx, -dy},
+        {-dx, 0.f},             {dx, 0.f},
+        {-dx, dy},  {0.f, dy},
+    };
+
+    if (resourceIndex < 0 || resourceIndex >= 7)
+        return PixelPos{0.f, 0.f};
+    return offsets[resourceIndex];
+}
+
 float depthKey(float tileX, float tileY)
 {
     return tileX + tileY;

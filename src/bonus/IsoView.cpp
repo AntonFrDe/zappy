@@ -36,9 +36,49 @@ void IsoGridCache::rebuildIfNeeded(int newWidth, int newHeight)
     }
 }
 
+namespace {
+
+void drawTileResources(sf::RenderWindow &window, const GameState &state, const IsoGridCache &grid)
+{
+    for (int y = 0; y < state.mapHeight; ++y) {
+        for (int x = 0; x < state.mapWidth; ++x) {
+            const Tile &tile = state.tileAt(x, y);
+            PixelPos center = renderThemeIso::isoProject(
+                static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f, grid.origin);
+
+            for (int r = 0; r < RESOURCE_COUNT; ++r) {
+                if (tile.resources[r] <= 0)
+                    continue;
+
+                PixelPos slotOffset = renderThemeIso::resourceSlotOffsetPx(r);
+                sf::Vector2f slotPos(center.x + slotOffset.x, center.y + slotOffset.y);
+
+                sf::Color color = toSfColor(render_theme::resourceColor(r));
+                float quantityScale = render_theme::resourceQuantityScale(tile.resources[r]);
+                float baseRadius = render_theme::isRareResource(r)
+                    ? renderThemeIso::kIsoTileWidth * 0.09f
+                    : renderThemeIso::kIsoTileWidth * 0.05f;
+
+                sf::CircleShape marker(baseRadius * quantityScale);
+                marker.setFillColor(color);
+                if (render_theme::isRareResource(r)) {
+                    marker.setOutlineThickness(1.f);
+                    marker.setOutlineColor(sf::Color(255, 255, 255, 180));
+                }
+                marker.setOrigin(marker.getRadius(), marker.getRadius());
+                marker.setPosition(slotPos);
+                window.draw(marker);
+            }
+        }
+    }
+}
+
+}
+
 void drawState(sf::RenderWindow &window, const GameState &state, const IsoGridCache &grid)
 {
     window.draw(grid.vertices);
+    drawTileResources(window, state, grid);
 
     std::vector<DrawablePlayer> drawablePlayers;
     drawablePlayers.reserve(state.players.size());

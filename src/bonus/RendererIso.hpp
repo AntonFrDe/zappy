@@ -24,6 +24,7 @@ PixelPos tileCenterPx(int tileX, int tileY);
 PixelPos tileCenterPxF(float tileX, float tileY);
 PixelPos defaultMapOrigin(int mapHeight);
 std::vector<IsoLineSegment> buildIsoGridLines(int mapWidth, int mapHeight, PixelPos origin = {0.f, 0.f});
+PixelPos resourceSlotOffsetPx(int resourceIndex);
 float depthKey(float tileX, float tileY);
 template <typename T, typename TilePosFn>
 void sortByDepth(std::vector<T> &items, TilePosFn tilePosOf)
