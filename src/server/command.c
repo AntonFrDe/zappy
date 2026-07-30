@@ -156,7 +156,7 @@ static void spawn_resources_if_ready(server_t *server)
 {
     if (!is_ready(server->next_resource_spawn))
         return;
-    map_spawn_resources(server->map);
+    map_spawn_resources(server->map, NULL, 0);
     server->next_resource_spawn = compute_ready_at(20, server->cfg->freq);
 }
 

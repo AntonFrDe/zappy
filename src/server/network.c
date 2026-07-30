@@ -54,7 +54,9 @@ int server_init(server_t *server, flags_t *cfg)
         return -1;
     }
     srand((unsigned int)time(NULL));
-    map_spawn_resources(server->map);
+    // au demarrage aucune GUI n'est connectee, et gui_send_snapshot
+    // renvoie toute la map a la connexion -> pas besoin de suivre
+    map_spawn_resources(server->map, NULL, 0);
     egg_list_init(&server->eggs);
     server->next_client_id = 1;
     server->next_egg_id = 1;
