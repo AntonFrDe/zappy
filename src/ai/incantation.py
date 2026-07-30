@@ -38,6 +38,7 @@ INCANTATION_PLAYERS = {1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 6, 7: 6}
 WINNING_COHORT_SIZE = 6
 TEAM_NAME = ""
 TEAM_PLAYERS = {}
+TEAM_COHORT = ()
 LAST_FOLLOWED_CALL = None
 PLAYER_ID = token_hex(8)
 INCANTATION_CALLS = {}
@@ -105,11 +106,13 @@ def remember_incantation_call(message):
         return
     if len(message_parts) == 6 and message_parts[0] == "incantation_request":
         if message_parts[1] == TEAM_NAME:
+            remember_team_player_activity(message_parts[2], message_parts[3])
             save_incantation_call(direction, message_parts[2], message_parts[3],
                 message_parts[4], message_parts[5])
         return
     if len(message_parts) == 6 and message_parts[0] == "incantation_ready":
         if message_parts[1] == TEAM_NAME:
+            remember_team_player_activity(message_parts[2], message_parts[4])
             save_ready_player(direction, message_parts[2], message_parts[3],
                 message_parts[4], message_parts[5])
         return
@@ -185,6 +188,19 @@ def parse_team_inventory(values):
         for resource, value in zip(TEAM_STATUS_RESOURCES, values)}
 
 
+def remember_team_player_activity(level_text, player_id):
+
+    if not level_text.isdigit() or player_id == PLAYER_ID:
+        return
+    level = int(level_text)
+    if level < 1 or level > 8:
+        return
+    status = TEAM_PLAYERS.get(player_id)
+    inventory = status.inventory if status is not None else {}
+    TEAM_PLAYERS[player_id] = TeamPlayerStatus(level, COORDINATION_TURN,
+        inventory)
+
+
 def save_team_status(team_name, level_text, player_id, inventory_values=()):
 
     if team_name != TEAM_NAME or not level_text.isdigit():
@@ -199,6 +215,8 @@ def save_team_status(team_name, level_text, player_id, inventory_values=()):
 
 def remove_old_team_players():
 
+    global TEAM_COHORT
+
     old_players = []
 
     for player_id, status in TEAM_PLAYERS.items():
@@ -208,6 +226,11 @@ def remove_old_team_players():
 
     for player_id in old_players:
         del TEAM_PLAYERS[player_id]
+    if TEAM_COHORT:
+        active_players = set(TEAM_PLAYERS)
+        active_players.add(PLAYER_ID)
+        TEAM_COHORT = tuple(player_id for player_id in TEAM_COHORT
+            if player_id in active_players)
 
 
 def count_team_players_at_level(level):
@@ -229,13 +252,27 @@ def get_incantation_cohort_ids(level=None):
     group_size = get_group_size(level)
     if group_size == 0:
         return []
+    if group_size == 1:
+        return [PLAYER_ID] if level == PLAYER_LEVEL else []
+    if TEAM_COHORT:
+        player_ids = []
+
+        for player_id in TEAM_COHORT:
+            if player_id == PLAYER_ID:
+                if level == PLAYER_LEVEL:
+                    player_ids.append(player_id)
+                continue
+            status = TEAM_PLAYERS.get(player_id)
+            if status is not None and status.level == level:
+                player_ids.append(player_id)
+        return player_ids
     player_ids = [PLAYER_ID] if level == PLAYER_LEVEL else []
 
     for player_id, status in TEAM_PLAYERS.items():
         if status.level == level:
             player_ids.append(player_id)
     player_ids.sort()
-    return player_ids[:group_size]
+    return player_ids
 
 
 def get_player_resource_targets():
@@ -400,7 +437,30 @@ def get_group_size(level):
 
     if minimum_players <= 1:
         return minimum_players
+    if not TEAM_COHORT:
+        return TEAM_SIZE
     return WINNING_COHORT_SIZE
+
+
+def remember_successful_cohort(new_level):
+
+    global TEAM_COHORT
+
+    if new_level != PLAYER_LEVEL + 1:
+        return
+    call = get_call_to_follow()
+    if call is None or PLAYER_ID not in call.cohort:
+        return
+    if len(call.cohort) < WINNING_COHORT_SIZE:
+        return
+    TEAM_COHORT = call.cohort
+    for player_id in TEAM_COHORT:
+        if player_id == PLAYER_ID:
+            continue
+        status = TEAM_PLAYERS.get(player_id)
+        inventory = status.inventory if status is not None else {}
+        TEAM_PLAYERS[player_id] = TeamPlayerStatus(new_level,
+            COORDINATION_TURN, inventory)
 
 
 def update_player_level(response):
@@ -415,6 +475,7 @@ def update_player_level(response):
         return False
     if level < 1 or level > 8:
         return False
+    remember_successful_cohort(level)
     PLAYER_LEVEL = level
     reset_incantation_calls()
     return True
