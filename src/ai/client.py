@@ -1,6 +1,5 @@
+import select
 import sys
-
-from incantation import remember_incantation_call, update_player_level
 
 CONNECT_WAIT = 5
 ANSWER_WAIT = 360
@@ -13,11 +12,29 @@ def stop_with_error(message):
     sys.exit(84)
 
 
+def wait_for_server_data(server_connection):
+
+    poller = select.poll()
+
+    try:
+        poller.register(server_connection, select.POLLIN | select.POLLERR | select.POLLHUP | select.POLLNVAL)
+        events = poller.poll(ANSWER_WAIT * 1000)
+    except (OSError, ValueError):
+        stop_with_error("connection to the server was lost")
+    if not events:
+        stop_with_error("the server took too long to answer")
+    event_mask = events[0][1]
+    if event_mask & select.POLLIN:
+        return
+    stop_with_error("connection to the server was lost")
+
+
 def read_server_line(server_connection):
 
     saved_data = SAVED_ANSWERS.get(server_connection, b"")
 
     while b"\n" not in saved_data:
+        wait_for_server_data(server_connection)
         try:
             new_data = server_connection.recv(4096)
         except TimeoutError:
@@ -44,11 +61,15 @@ def receive_response_from_server(server_connection, expected_command=None):
         if normal_text == "dead":
             sys.exit(0)
         if normal_text.startswith("message "):
+            from incantation import remember_incantation_call
+
             remember_incantation_call(normal_text)
             continue
         if normal_text.startswith("eject:"):
             continue
         if normal_text.startswith("Current level:"):
+            from incantation import update_player_level
+
             level_updated = update_player_level(normal_text)
             if expected_command == "Incantation":
                 return normal_text

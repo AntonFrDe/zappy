@@ -1,10 +1,9 @@
+from math import isqrt
 from random import choice
 
 RESOURCE_PRIORITY = ["linemate", "deraumere", "sibur", "mendiane", "phiras", "thystame"]
-RARE_STONES = ["sibur", "mendiane", "phiras", "thystame"]
-EARLY_STONE_DISTRACTIONS = ["deraumere", "sibur"]
-GUARDED_STONE_LIMITS = {"sibur": 1, "mendiane": 1, "phiras": 0, "thystame": 0}
-FOOD_LOW_LIMIT, FOOD_FULL_LIMIT = 4, 12
+FOOD_SURVIVAL_LIMIT = 8
+FOOD_RESERVE_TARGET = 30
 SURVIVAL_MOVES = ["Forward", "Left", "Right"]
 EXPLORATION_FORWARD_TARGETS = ["food", "linemate", "deraumere"]
 INCANTATION_STONES = {1: {"linemate": 1},
@@ -41,23 +40,37 @@ def parse_look_response(look):
     return [tile.split() for tile in look.strip("[]").split(",")]
 
 
-def choose_direction_toward_item(look, item):
+def find_visible_item_position(look, item):
 
     tiles = parse_look_response(look)
 
     for index, tile in enumerate(tiles):
         if item not in tile:
             continue
-        if index == 0:
-            return None
-        row = int(index ** 0.5)
+        row = isqrt(index)
         lateral = index - row * row - row
-        if lateral < 0:
-            return "Left"
-        if lateral > 0:
-            return "Right"
-        return "Forward"
+        return row, lateral
     return None
+
+
+def get_path_to_visible_item(look, item):
+
+    position = find_visible_item_position(look, item)
+
+    if position is None:
+        return None
+    row, lateral = position
+    if row == 0:
+        return []
+
+    path = ["Forward"] * row
+
+    if lateral < 0:
+        path.append("Left")
+    elif lateral > 0:
+        path.append("Right")
+    path.extend(["Forward"] * abs(lateral))
+    return path
 
 
 def count_visible_item(tile, item):
@@ -65,19 +78,10 @@ def count_visible_item(tile, item):
     return tile.count(item)
 
 
-def count_other_players(tile):
-
-    return max(count_visible_item(tile, "player") - 1, 0)
-
-
 def choose_exploration_command(tile):
 
     player_count = count_visible_item(tile, "player")
 
-    if count_other_players(tile) > 0:
-        return "Right"
-    if "egg" in tile:
-        return "Left"
     for resource in EXPLORATION_FORWARD_TARGETS:
         if resource in tile:
             return "Forward"
@@ -85,59 +89,6 @@ def choose_exploration_command(tile):
         return "Forward"
 
     return choice(SURVIVAL_MOVES)
-
-
-def should_take_food(tile, inventory):
-
-    food_count = count_visible_item(tile, "food")
-    if food_count == 0:
-        return False
-    if inventory.get("food", 0) < 10:
-        return True
-    if food_count > 2:
-        return True
-    if len(tile) == food_count:
-        return True
-    return False
-
-
-def should_take_extra_food(tile):
-
-    return count_visible_item(tile, "food") > 1
-
-
-def should_skip_food_when_full(tile, inventory):
-
-    if "food" not in tile:
-        return False
-
-    return inventory.get("food", 0) > FOOD_FULL_LIMIT
-
-
-def should_collect_stone(tile):
-
-    if count_visible_item(tile, "linemate") > 0:
-        return True
-    if count_visible_item(tile, "deraumere") > 0:
-        return True
-
-    return False
-
-
-def should_wait_before_incantation(inventory):
-
-    food, linemate = inventory.get("food", 0), inventory.get("linemate", 0)
-
-    if food == 0:
-        return True
-    if food < 2:
-        return True
-    if linemate < 1:
-        return True
-    if food < 4 and linemate == 0:
-        return True
-
-    return False
 
 
 def has_required_stones_for_level(level, inventory, tile):
@@ -152,177 +103,12 @@ def has_required_stones_for_level(level, inventory, tile):
     return True
 
 
-def get_missing_stones(level, inventory):
+def get_missing_stones_for_requirements(requirements, inventory):
 
     missing_stones = []
 
-    for stone, needed in INCANTATION_STONES.get(level, {}).items():
+    for stone, needed in requirements.items():
         if inventory.get(stone, 0) < needed:
             missing_stones.append(stone)
 
     return missing_stones
-
-
-def can_try_level_two(inventory, tile):
-
-    if inventory.get("food", 0) < 2:
-        return False
-
-    return has_required_stones_for_level(1, inventory, tile)
-
-
-def should_skip_extra_stone(inventory, tile):
-
-    if inventory.get("linemate", 0) > 1 and "linemate" in tile:
-        return True
-    if inventory.get("deraumere", 0) > 1 and "deraumere" in tile:
-        return True
-    if inventory.get("sibur", 0) > 1 and "sibur" in tile:
-        return True
-    return False
-
-
-def should_turn_near_players(tile):
-
-    if count_other_players(tile) > 0:
-        return True
-
-    return False
-
-
-def should_leave_player_only_tile(tile):
-
-    player_count = count_visible_item(tile, "player")
-
-    if count_other_players(tile) == 0:
-        return False
-
-    return len(tile) == player_count
-
-
-def should_collect_rare_stone(tile):
-
-    for resource in RARE_STONES:
-        if resource in tile:
-            return True
-    return False
-
-
-def should_ignore_egg_when_hungry(tile, inventory):
-
-    if "egg" not in tile or "food" in tile:
-        return False
-    return inventory.get("food", 0) < FOOD_LOW_LIMIT
-
-
-def should_follow_egg(tile):
-
-    if "egg" in tile:
-        return True
-    return False
-
-
-def should_check_inventory(tile):
-
-    if count_other_players(tile) > 0 and "food" not in tile:
-        return True
-    return False
-
-
-def should_turn_on_busy_tile(tile):
-
-    if len(tile) > 4:
-        return True
-    if count_other_players(tile) > 0 and len(tile) > 2:
-        return True
-    return False
-
-
-def should_take_linemate_first(tile):
-
-    if "linemate" not in tile:
-        return False
-    if "food" in tile:
-        return False
-    return True
-
-
-def should_seek_linemate_before_other_stones(tile, inventory):
-
-    if inventory.get("linemate", 0) > 0:
-        return False
-    if "linemate" in tile or "food" in tile:
-        return False
-    if count_other_players(tile) > 0:
-        return False
-    return any(resource in tile for resource in EARLY_STONE_DISTRACTIONS)
-
-
-def should_take_deraumere_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "deraumere", 1)
-
-
-def should_take_guarded_stone(tile, inventory, resource, max_count):
-
-    if resource not in tile or inventory.get(resource, 0) > max_count:
-        return False
-
-    if "food" in tile and inventory.get("food", 0) < 5:
-        return False
-
-    return count_other_players(tile) == 0
-
-
-def get_guarded_resource_to_take(tile, inventory):
-
-    for resource in RARE_STONES:
-        limit = GUARDED_STONE_LIMITS[resource]
-        if should_take_guarded_stone(tile, inventory, resource, limit):
-            return resource
-    return None
-
-
-def should_take_sibur_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "sibur", 1)
-
-
-def should_take_mendiane_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "mendiane", 1)
-
-
-def should_take_phiras_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "phiras", 0)
-
-
-def should_take_thystame_first(tile, inventory):
-
-    return should_take_guarded_stone(tile, inventory, "thystame", 0)
-
-
-def should_avoid_busy_resource_tile(tile):
-
-    if count_other_players(tile) == 0:
-        return False
-    if "linemate" in tile:
-        return True
-    if "deraumere" in tile:
-        return True
-    if "sibur" in tile or "mendiane" in tile:
-        return True
-    return False
-
-
-def should_seek_food_before_rare_stone(tile, inventory):
-
-    if inventory.get("food", 0) >= FOOD_LOW_LIMIT:
-        return False
-    if "food" in tile or count_other_players(tile) > 0:
-        return False
-    for resource in RARE_STONES:
-        if resource in tile:
-            return True
-    return False

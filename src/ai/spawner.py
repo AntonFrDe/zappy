@@ -4,100 +4,81 @@ import time
 from pathlib import Path
 
 from client import send_command_to_server
+from strategy import FOOD_SURVIVAL_LIMIT
 from team import TEAM_SIZE
 
 AI_MAIN = Path(__file__).resolve().parent / "main.py"
 START_COMMAND = []
-CHILD_AI = None
+CHILDREN = {}
 PLAYER_NUMBER = 1
-TEAM_GOAL = TEAM_SIZE
-BACKUP_PLAYER_NUMBER = TEAM_GOAL + 1
-MAIN_PROCESS_ID = None
-CHILD_STOPPED_AT = None
-RETRY_WAIT = 2
+PLAYER_RETRY_AFTER = {}
+SPAWN_RETRY_DELAY = 2
 
 
-def set_start_command(host, port, team, player_number, main_process_id):
+def set_start_command(host, port, team, player_number):
 
-    global START_COMMAND, PLAYER_NUMBER, MAIN_PROCESS_ID
+    global START_COMMAND, PLAYER_NUMBER
 
     PLAYER_NUMBER = player_number
-    MAIN_PROCESS_ID = main_process_id
-    next_player = player_number + 1
-    START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port), "-n", team, "-h", host, "-i", str(next_player), "--main-pid", str(main_process_id)]
+    START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port),
+        "-n", team, "-h", host]
 
 
-def main_bot_is_running():
+def get_available_player_number():
 
-    if MAIN_PROCESS_ID is None:
-        return True
-    status_file = Path("/proc/" + str(MAIN_PROCESS_ID) + "/stat")
-    try:
-        status = status_file.read_text().split()
-    except OSError:
-        return False
-    return len(status) > 2 and status[2] != "Z"
+    now = time.monotonic()
 
-
-def can_create_bot():
-
-    if PLAYER_NUMBER < TEAM_GOAL:
-        return True
-    if PLAYER_NUMBER == TEAM_GOAL:
-        return not main_bot_is_running()
-    return False
-
-
-def child_is_running():
-
-    global CHILD_AI, CHILD_STOPPED_AT
-
-    if CHILD_AI is None:
-        return False
-    if CHILD_AI.poll() is None:
-        return True
-    CHILD_AI = None
-    CHILD_STOPPED_AT = time.monotonic()
-    return False
-
-
-def can_start_child():
-
-    if CHILD_STOPPED_AT is None:
-        return True
-    return time.monotonic() - CHILD_STOPPED_AT >= RETRY_WAIT
+    for player_number in range(2, TEAM_SIZE + 1):
+        if player_number in CHILDREN:
+            continue
+        if now < PLAYER_RETRY_AFTER.get(player_number, 0):
+            continue
+        return player_number
+    return None
 
 
 def start_new_ai():
 
-    global CHILD_AI, CHILD_STOPPED_AT
+    player_number = get_available_player_number()
 
-    if child_is_running() or not can_start_child() or not START_COMMAND:
+    if not START_COMMAND or player_number is None:
         return False
+    command = START_COMMAND + ["-i", str(player_number)]
     try:
-        CHILD_AI = subprocess.Popen(START_COMMAND, close_fds=True)
+        child = subprocess.Popen(command, close_fds=True)
     except OSError:
-        CHILD_AI = None
-        CHILD_STOPPED_AT = time.monotonic()
+        PLAYER_RETRY_AFTER[player_number] = (time.monotonic()
+            + SPAWN_RETRY_DELAY)
         return False
-    CHILD_STOPPED_AT = None
+    CHILDREN[player_number] = child
+    PLAYER_RETRY_AFTER.pop(player_number, None)
     return True
 
 
-def try_create_team_slot(server_connection, inventory, tile):
+def remove_dead_children():
 
-    if not can_create_bot():
+    for player_number, child in list(CHILDREN.items()):
+        if child.poll() is not None:
+            del CHILDREN[player_number]
+            PLAYER_RETRY_AFTER[player_number] = (time.monotonic()
+                + SPAWN_RETRY_DELAY)
+
+
+def try_create_team_slot(server_connection, inventory):
+
+    if PLAYER_NUMBER != 1:
         return False
-    if child_is_running() or not can_start_child():
+    remove_dead_children()
+    if (len(CHILDREN) >= TEAM_SIZE - 1
+            or get_available_player_number() is None):
         return False
-    if inventory.get("food", 0) < 8:
+    if inventory.get("food", 0) < FOOD_SURVIVAL_LIMIT:
         return False
-    reponse = send_command_to_server(server_connection, "Connect_nbr")
-    if not reponse.isdigit():
+    response = send_command_to_server(server_connection, "Connect_nbr")
+    if not response.isdigit():
         return False
-    if int(reponse) > 0:
+    if int(response) > 0:
         return start_new_ai()
     if send_command_to_server(server_connection, "Fork") != "ok":
         return False
-    start_new_ai()
-    return True
+    return start_new_ai()
