@@ -17,43 +17,42 @@ from strategy import (FOOD_RESERVE_TARGET,
     parse_inventory_response,)
 from team import get_player_resource_targets, share_team_status
 
-SURVIVAL_CONNECTIONS = set()
-SURVIVAL_PATHS = {}
+SURVIVAL_STATE = {
+    "active": False,
+    "run_length": 3,
+    "steps_left": 3,
+    "turns": 0,
+}
 
 
-def next_survival_move(server_connection):
+def next_survival_move():
 
-    path = SURVIVAL_PATHS.setdefault(server_connection, {"run_length": 3, "steps_left": 3, "turns": 0,})
-
-    if path["steps_left"] > 0:
-        path["steps_left"] -= 1
+    if SURVIVAL_STATE["steps_left"] > 0:
+        SURVIVAL_STATE["steps_left"] -= 1
         return "Forward"
-    path["turns"] += 1
-    if path["turns"] >= 2:
-        path["turns"] = 0
-        path["run_length"] += 1
-    path["steps_left"] = path["run_length"]
+    SURVIVAL_STATE["turns"] += 1
+    if SURVIVAL_STATE["turns"] >= 2:
+        SURVIVAL_STATE["turns"] = 0
+        SURVIVAL_STATE["run_length"] += 1
+    SURVIVAL_STATE["steps_left"] = SURVIVAL_STATE["run_length"]
     return "Right"
 
 
 def keep_player_alive(server_connection, inventory=None):
-
-    was_surviving = server_connection in SURVIVAL_CONNECTIONS
 
     if inventory is None:
         response = send_command_to_server(server_connection, "Inventory")
         inventory = parse_inventory_response(response)
     food = inventory.get("food", 0)
 
-    if not was_surviving and food > FOOD_SURVIVAL_LIMIT:
+    if not SURVIVAL_STATE["active"] and food > FOOD_SURVIVAL_LIMIT:
         return False
 
     if food >= FOOD_RESERVE_TARGET:
-        SURVIVAL_CONNECTIONS.discard(server_connection)
-        SURVIVAL_PATHS.pop(server_connection, None)
+        SURVIVAL_STATE.update(active=False, run_length=3, steps_left=3, turns=0)
         return False
 
-    SURVIVAL_CONNECTIONS.add(server_connection)
+    SURVIVAL_STATE["active"] = True
 
     look = send_command_to_server(server_connection, "Look")
     tile = get_current_tile(look)
@@ -65,7 +64,7 @@ def keep_player_alive(server_connection, inventory=None):
     if move_toward_visible_item(server_connection, look, "food", True):
         return True
 
-    send_command_to_server(server_connection, next_survival_move(server_connection))
+    send_command_to_server(server_connection, next_survival_move())
 
     return True
 

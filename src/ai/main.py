@@ -10,8 +10,7 @@ for import_path in (AI_DIR, PROJECT_AI_DIR):
         sys.path.insert(0, str(import_path))
 
 from bot import run_ai_loop
-from client import (ANSWER_WAIT, CONNECT_WAIT, SAVED_ANSWERS,
-join_team, stop_with_error)
+from client import ANSWER_WAIT, CONNECT_WAIT, join_team, stop_with_error
 from spawner import set_start_command
 from team import TEAM_SIZE, set_team_name
 
@@ -80,13 +79,10 @@ def main():
     except OSError:
         stop_with_error("could not connect to the server")
 
-    try:
-        with server_connection:
-            server_connection.settimeout(ANSWER_WAIT)
-            join_team(server_connection, team)
-            run_ai_loop(server_connection)
-    finally:
-        SAVED_ANSWERS.pop(server_connection, None)
+    with server_connection:
+        server_connection.settimeout(ANSWER_WAIT)
+        join_team(server_connection, team)
+        run_ai_loop(server_connection)
 
 
 if __name__ == "__main__":

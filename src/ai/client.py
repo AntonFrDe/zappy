@@ -1,9 +1,8 @@
-import select
 import sys
 
 CONNECT_WAIT = 5
 ANSWER_WAIT = 360
-SAVED_ANSWERS = {}
+SERVER_DATA_BUFFER = b""
 
 
 def stop_with_error(message):
@@ -12,29 +11,11 @@ def stop_with_error(message):
     sys.exit(84)
 
 
-def wait_for_server_data(server_connection):
-
-    poller = select.poll()
-
-    try:
-        poller.register(server_connection, select.POLLIN | select.POLLERR | select.POLLHUP | select.POLLNVAL)
-        events = poller.poll(ANSWER_WAIT * 1000)
-    except (OSError, ValueError):
-        stop_with_error("connection to the server was lost")
-    if not events:
-        stop_with_error("the server took too long to answer")
-    event_mask = events[0][1]
-    if event_mask & select.POLLIN:
-        return
-    stop_with_error("connection to the server was lost")
-
-
 def read_server_line(server_connection):
 
-    saved_data = SAVED_ANSWERS.get(server_connection, b"")
+    global SERVER_DATA_BUFFER
 
-    while b"\n" not in saved_data:
-        wait_for_server_data(server_connection)
+    while b"\n" not in SERVER_DATA_BUFFER:
         try:
             new_data = server_connection.recv(4096)
         except TimeoutError:
@@ -43,10 +24,9 @@ def read_server_line(server_connection):
             stop_with_error("connection to the server was lost")
         if not new_data:
             stop_with_error("the server closed the connection")
-        saved_data += new_data
+        SERVER_DATA_BUFFER += new_data
 
-    line, saved_data = saved_data.split(b"\n", 1)
-    SAVED_ANSWERS[server_connection] = saved_data
+    line, SERVER_DATA_BUFFER = SERVER_DATA_BUFFER.split(b"\n", 1)
     try:
         return line.decode().strip()
     except UnicodeDecodeError:

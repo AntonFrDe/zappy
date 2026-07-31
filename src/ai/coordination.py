@@ -172,11 +172,6 @@ def call_was_already_followed(caller_id):
     return False
 
 
-def get_player_level():
-
-    return STATE.player_level
-
-
 def update_player_level(response):
 
     if not response.startswith("Current level:"):

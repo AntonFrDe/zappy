@@ -89,11 +89,9 @@ def get_available_player_number():
     return None
 
 
-def start_new_ai():
+def start_new_ai(player_number):
 
-    player_number = get_available_player_number()
-
-    if not START_COMMAND or player_number is None:
+    if not START_COMMAND:
         return False
     command = START_COMMAND + ["-i", str(player_number)]
     try:
@@ -119,7 +117,8 @@ def try_create_team_slot(server_connection, inventory):
     if not is_team_manager():
         return False
     remove_dead_children()
-    if get_available_player_number() is None:
+    player_number = get_available_player_number()
+    if player_number is None:
         return False
     if inventory.get("food", 0) < FOOD_SURVIVAL_LIMIT:
         return False
@@ -127,7 +126,7 @@ def try_create_team_slot(server_connection, inventory):
     if not response.isdigit():
         return False
     if int(response) > 0:
-        return start_new_ai()
+        return start_new_ai(player_number)
     if send_command_to_server(server_connection, "Fork") != "ok":
         return False
-    return start_new_ai()
+    return start_new_ai(player_number)
