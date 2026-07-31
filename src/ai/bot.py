@@ -2,20 +2,22 @@ from client import send_command_to_server
 from coordination import (advance_coordination_turn,
     cancel_incantation_wait,
     is_waiting_for_incantation,)
+from coordination_state import STATE
 from incantation import (follow_incantation_call,
-    get_resource_priority,
     request_incantation_help,
     try_current_incantation,)
 from spawner import try_create_team_slot
 from strategy import (FOOD_RESERVE_TARGET,
     FOOD_SURVIVAL_LIMIT,
+    INCANTATION_STONES,
+    TARGET_LEVEL,
     choose_exploration_command,
     count_visible_item,
     get_path_to_visible_item,
     get_current_tile,
     get_missing_stones_for_requirements,
     parse_inventory_response,)
-from team import get_player_resource_targets, share_team_status
+from team import share_team_status
 
 SURVIVAL_STATE = {
     "active": False,
@@ -67,20 +69,11 @@ def keep_player_alive(server_connection, inventory=None):
     return True
 
 
-def collect_visible_resource(server_connection, tile):
-
-    for resource in get_resource_priority():
-
-        if resource in tile:
-            send_command_to_server(server_connection, "Take " + resource)
-            return True
-
-    return False
-
-
 def collect_missing_stone(server_connection, inventory, look, tile):
 
-    targets = get_player_resource_targets()
+    if STATE.player_level >= TARGET_LEVEL:
+        return False
+    targets = INCANTATION_STONES.get(STATE.player_level, {})
     missing_stones = get_missing_stones_for_requirements(targets, inventory)
 
     for stone in missing_stones:
@@ -120,12 +113,12 @@ def take_food_to_target(server_connection, inventory, tile, target):
     return True
 
 
-def collect_useful_resource(server_connection, inventory, tile):
+def collect_food(server_connection, inventory, tile):
 
     if "food" in tile and inventory.get("food", 0) < FOOD_RESERVE_TARGET:
         send_command_to_server(server_connection, "Take food")
         return True
-    return collect_visible_resource(server_connection, tile)
+    return False
 
 
 def handle_waiting_incantation_step(server_connection, inventory):
@@ -161,7 +154,7 @@ def run_ai_loop(server_connection):
             continue
         if try_create_team_slot(server_connection, inventory):
             continue
-        if share_team_status(server_connection, inventory):
+        if share_team_status(server_connection):
             continue
         look = send_command_to_server(server_connection, "Look")
         tile = get_current_tile(look)
@@ -171,6 +164,6 @@ def run_ai_loop(server_connection):
             continue
         if request_incantation_help(server_connection, inventory, tile):
             continue
-        if collect_useful_resource(server_connection, inventory, tile):
+        if collect_food(server_connection, inventory, tile):
             continue
         send_command_to_server(server_connection, choose_exploration_command(tile))

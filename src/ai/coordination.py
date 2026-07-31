@@ -1,6 +1,5 @@
 from coordination_state import IncantationCall, ReadyPlayer, STATE
 from team import (TEAM_SIZE,
-    remember_successful_cohort,
     remember_team_player_activity,
     save_team_status,)
 
@@ -48,7 +47,7 @@ def handle_broadcast_message(message):
     message_parts = payload.split("|")
 
     if len(message_parts) >= 4 and message_parts[0] == "team_status":
-        save_team_status(message_parts[1], message_parts[2], message_parts[3], message_parts[4:],)
+        save_team_status(message_parts[1], message_parts[2], message_parts[3])
         return
     if len(message_parts) == 6 and message_parts[0] == "incantation_request":
         if message_parts[1] == STATE.team_name:
@@ -182,8 +181,6 @@ def update_player_level(response):
         return False
     if level < 1 or level > 8:
         return False
-    call = get_call_to_follow() if level == STATE.player_level + 1 else None
-    remember_successful_cohort(level, call)
     STATE.player_level = level
     reset_incantation_calls()
     return True

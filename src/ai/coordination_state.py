@@ -6,7 +6,6 @@ from secrets import token_hex
 class TeamPlayerStatus:
     level: int
     updated_turn: int
-    inventory: dict
 
 
 @dataclass(frozen=True)
@@ -30,7 +29,6 @@ class CoordinationState:
     player_level: int = 1
     team_name: str = ""
     team_players: dict = field(default_factory=dict)
-    team_cohort: tuple = ()
     last_followed_call: tuple | None = None
     player_id: str = field(default_factory=lambda: token_hex(8))
     incantation_calls: dict = field(default_factory=dict)

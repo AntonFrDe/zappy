@@ -10,25 +10,16 @@ from coordination_state import IncantationCall, STATE
 from strategy import (FOOD_SURVIVAL_LIMIT,
     INCANTATION_PLAYERS,
     INCANTATION_STONES,
-    RESOURCE_PRIORITY,
+    TARGET_LEVEL,
     count_visible_item,
     get_current_tile,
     has_required_stones_for_level,)
 from team import (count_team_players_at_level,
     get_group_size,
     get_incantation_cohort_ids,
-    is_incantation_leader,
-    team_has_required_stones_for_level,)
+    is_incantation_leader,)
 
 INCANTATION_FOOD_RESERVE = FOOD_SURVIVAL_LIMIT
-
-
-def get_resource_priority():
-
-    needed_resources = list(INCANTATION_STONES.get(STATE.player_level, {}).keys())
-
-    return needed_resources + [resource for resource in RESOURCE_PRIORITY
-        if resource not in needed_resources]
 
 
 def place_missing_stones_for_level(server_connection, inventory, tile, level):
@@ -107,7 +98,7 @@ def has_incantation_help_requirements(inventory, tile, required_players):
     if count_team_players_at_level(STATE.player_level) < required_players:
         return False
 
-    return team_has_required_stones_for_level(STATE.player_level, inventory, tile)
+    return has_required_stones_for_level(STATE.player_level, inventory, tile)
 
 
 def broadcast_incantation_help(server_connection):
@@ -175,6 +166,11 @@ def request_incantation_help(server_connection, inventory, tile):
 
 
 def follow_incantation_call(server_connection, inventory):
+
+    if STATE.player_level >= TARGET_LEVEL:
+        STATE.waiting_for_incantation = False
+        STATE.arrival_confirmation_caller = None
+        return False
 
     call = get_call_to_follow()
 

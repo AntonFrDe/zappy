@@ -8,13 +8,12 @@ from tempfile import gettempdir
 
 from client import send_command_to_server, stop_with_error
 from strategy import FOOD_SURVIVAL_LIMIT
-from team import TEAM_SIZE
 
 AI_MAIN = Path(__file__).resolve().parent / "main.py"
 START_COMMAND = []
-CHILDREN = {}
+CHILD_AI = None
 PLAYER_NUMBER = 1
-PLAYER_RETRY_AFTER = {}
+RETRY_AFTER = 0
 SPAWN_RETRY_DELAY = 2
 LOCK_PREFIX = None
 PLAYER_SLOT_LOCK = None
@@ -71,62 +70,63 @@ def set_start_command(host, port, team, player_number):
         is_team_manager()
 
 
-def get_available_player_number():
+def get_partner_player_number():
+
+    return 2 if PLAYER_NUMBER == 1 else 1
+
+
+def can_start_partner():
+
+    global CHILD_AI, RETRY_AFTER
 
     now = time.monotonic()
 
-    for player_number in range(1, TEAM_SIZE + 1):
-        if player_number == PLAYER_NUMBER:
-            continue
-        if player_number in CHILDREN:
-            continue
-        if now < PLAYER_RETRY_AFTER.get(player_number, 0):
-            continue
-        slot_lock = try_acquire_lock("player_" + str(player_number))
-        if slot_lock is not None:
-            release_lock(slot_lock)
-            return player_number
-    return None
-
-
-def start_new_ai(player_number):
-
-    if not START_COMMAND:
+    if CHILD_AI is not None:
+        if CHILD_AI.poll() is None:
+            return False
+        CHILD_AI = None
+        RETRY_AFTER = now + SPAWN_RETRY_DELAY
         return False
-    command = START_COMMAND + ["-i", str(player_number)]
-    try:
-        child = subprocess.Popen(command, close_fds=True)
-    except OSError:
-        PLAYER_RETRY_AFTER[player_number] = (time.monotonic() + SPAWN_RETRY_DELAY)
+    if now < RETRY_AFTER:
         return False
-    CHILDREN[player_number] = child
-    PLAYER_RETRY_AFTER.pop(player_number, None)
+    slot_lock = try_acquire_lock(
+        "player_" + str(get_partner_player_number()))
+    if slot_lock is None:
+        return False
+    release_lock(slot_lock)
     return True
 
 
-def remove_dead_children():
+def start_partner_ai():
 
-    for player_number, child in list(CHILDREN.items()):
-        if child.poll() is not None:
-            del CHILDREN[player_number]
-            PLAYER_RETRY_AFTER[player_number] = (time.monotonic() + SPAWN_RETRY_DELAY)
+    global CHILD_AI, RETRY_AFTER
+
+    if not START_COMMAND or CHILD_AI is not None:
+        return False
+    command = START_COMMAND + ["-i", str(get_partner_player_number())]
+    try:
+        CHILD_AI = subprocess.Popen(command, close_fds=True)
+    except OSError:
+        CHILD_AI = None
+        RETRY_AFTER = time.monotonic() + SPAWN_RETRY_DELAY
+        return False
+    RETRY_AFTER = 0
+    return True
 
 
 def try_create_team_slot(server_connection, inventory):
 
     if not is_team_manager():
         return False
-    remove_dead_children()
-    player_number = get_available_player_number()
-    if player_number is None:
-        return False
     if inventory.get("food", 0) < FOOD_SURVIVAL_LIMIT:
+        return False
+    if not can_start_partner():
         return False
     response = send_command_to_server(server_connection, "Connect_nbr")
     if not response.isdigit():
         return False
     if int(response) > 0:
-        return start_new_ai(player_number)
+        return start_partner_ai()
     if send_command_to_server(server_connection, "Fork") != "ok":
         return False
-    return start_new_ai(player_number)
+    return start_partner_ai()
