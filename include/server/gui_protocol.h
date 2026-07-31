@@ -8,6 +8,11 @@
 // vient de se connecter
     void gui_send_snapshot(server_t *server, client_t *gui);
 
+// bct X Y q0..q6 a une seule GUI (reponse a une requete)
+    void gui_send_tile(client_t *gui, map_t *map, int64_t x, int64_t y);
+// mm chose en broadcast, quand le contenu d'une case a change
+    void gui_notify_tile(server_t *server, int64_t x, int64_t y);
+
     void gui_notify_new_player(server_t *server, client_t *client);
     void gui_notify_position(server_t *server, client_t *client);
     void gui_notify_level(server_t *server, client_t *client);

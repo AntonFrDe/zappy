@@ -24,6 +24,12 @@
         tile_t *tiles; // row-major, tiles[y * width + x]
     } map_t;
 
+// une case touchee par le respawn, pour les bct a pousser
+    typedef struct {
+        int64_t x;
+        int64_t y;
+    } tile_pos_t;
+
 // aligne sur le protocole gui (orientation O: 1=N 2=E 3=S 4=W)
     typedef enum {
         DIR_NORTH = 1,
@@ -41,8 +47,11 @@
     // complete les ressources manquantes jusqu'a la cible
     // (densite * width * height, min 1 de chaque) ; appele au demarrage
     // puis toutes les 20 unites de temps (cf sujet) - ne rajoute que le
-    // manquant, ne double jamais ce qui est deja present sur la carte
-    void map_spawn_resources(map_t *map);
+    // manquant, ne double jamais ce qui est deja present sur la carte.
+    // remplit changed (jusqu'a max) avec les cases touchees, sans doublon,
+    // et retourne combien ; -1 si ca deborde ou si changed est NULL,
+    // dans ce cas l'appelant doit pousser toute la map
+    int map_spawn_resources(map_t *map, tile_pos_t *changed, int max);
     const char *resource_name(resource_t r);
     // -1 si nom inconnu
     int resource_from_name(const char *name);
