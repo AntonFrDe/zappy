@@ -1,10 +1,8 @@
 import sys
 
-from incantation import remember_incantation_call, update_player_level
-
 CONNECT_WAIT = 5
 ANSWER_WAIT = 360
-SAVED_ANSWERS = {}
+SERVER_DATA_BUFFER = b""
 
 
 def stop_with_error(message):
@@ -15,9 +13,9 @@ def stop_with_error(message):
 
 def read_server_line(server_connection):
 
-    saved_data = SAVED_ANSWERS.get(server_connection, b"")
+    global SERVER_DATA_BUFFER
 
-    while b"\n" not in saved_data:
+    while b"\n" not in SERVER_DATA_BUFFER:
         try:
             new_data = server_connection.recv(4096)
         except TimeoutError:
@@ -26,10 +24,9 @@ def read_server_line(server_connection):
             stop_with_error("connection to the server was lost")
         if not new_data:
             stop_with_error("the server closed the connection")
-        saved_data += new_data
+        SERVER_DATA_BUFFER += new_data
 
-    line, saved_data = saved_data.split(b"\n", 1)
-    SAVED_ANSWERS[server_connection] = saved_data
+    line, SERVER_DATA_BUFFER = SERVER_DATA_BUFFER.split(b"\n", 1)
     try:
         return line.decode().strip()
     except UnicodeDecodeError:
@@ -44,11 +41,17 @@ def receive_response_from_server(server_connection, expected_command=None):
         if normal_text == "dead":
             sys.exit(0)
         if normal_text.startswith("message "):
-            remember_incantation_call(normal_text)
+
+            from coordination import handle_broadcast_message
+
+            handle_broadcast_message(normal_text)
             continue
         if normal_text.startswith("eject:"):
             continue
         if normal_text.startswith("Current level:"):
+
+            from coordination import update_player_level
+
             level_updated = update_player_level(normal_text)
             if expected_command == "Incantation":
                 return normal_text
