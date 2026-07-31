@@ -13,7 +13,6 @@ Le client IA pilote un seul joueur : il envoie des commandes texte au serveur, l
 | `bot.py` | Boucle principale (`run_ai_loop`) et actions du joueur |
 | `coordination_state.py` | État partagé par les mécanismes d'élévation |
 | `coordination.py` | Réception des broadcasts et suivi des sessions d'élévation |
-| `team.py` | Coéquipiers connus et groupe d'incantation courant |
 | `incantation.py` | Dépôt des pierres et exécution du rituel |
 | `spawner.py` | Création et relance du second joueur |
 | `strategy.py` | Fonctions de décision pures (priorités, incantation, ramassage) |
@@ -23,18 +22,20 @@ Le client IA pilote un seul joueur : il envoie des commandes texte au serveur, l
 La coordination d'une élévation suit toujours le même chemin :
 
 1. `client.py` transmet les broadcasts reçus à `coordination.py`.
-2. `coordination.py` mémorise l'appel du chef et les joueurs prêts.
-3. `team.py` détermine le chef et sélectionne exactement le nombre de
-   joueurs requis par le niveau. Chaque joueur collecte les pierres
-   requises sans partager son inventaire.
-4. `incantation.py` rapproche les participants, dépose les pierres et
+2. `coordination.py` valide l'équipe, le niveau et la session de l'appel.
+   Si les deux joueurs émettent un appel simultanément, le plus petit
+   identifiant devient le chef.
+3. Le partenaire suit la direction du broadcast, puis confirme son
+   arrivée avec l'identifiant de session reçu.
+4. `incantation.py` dépose les pierres et
    lance la commande `Incantation`.
 5. `coordination.py` enregistre le nouveau niveau et ferme la session.
 
 Toutes les données modifiables de ce mécanisme sont regroupées dans
 l'objet `STATE` de `coordination_state.py`. Les autres modules lisent ou
 mettent à jour cet objet au lieu de déclarer leurs propres variables
-globales.
+globales. Une session trop ancienne est abandonnée afin que les joueurs
+puissent reprendre leur exploration.
 
 ## Démarrage
 
@@ -51,14 +52,13 @@ globales.
 | 1 | Survie — nourriture au sol ou déplacement pour en chercher |
 | 2 | Suivi d'un appel d'incantation en cours |
 | 3 | Création ou relance du second joueur |
-| 4 | Signalement périodique du niveau aux coéquipiers |
-| 5 | Pierres manquantes et incantation jusqu'au niveau 4 |
-| 6 | Constitution d'une réserve de nourriture |
-| 7 | Exploration par défaut si rien d'autre ne s'applique |
+| 4 | Pierres manquantes et incantation jusqu'au niveau 4 |
+| 5 | Constitution d'une réserve de nourriture |
+| 6 | Exploration par défaut si rien d'autre ne s'applique |
 
-L'IA lance au maximum deux joueurs. Cela suffit pour atteindre le niveau
-4 ; les élévations suivantes, qui demandent davantage de participants,
-ne sont volontairement pas poursuivies. Le gestionnaire surveille un seul
+L'IA lance au maximum deux joueurs, le nombre exact nécessaire pour
+atteindre le niveau 4. Le protocole de coordination est volontairement
+limité à un chef et un partenaire. Le gestionnaire surveille un seul
 processus partenaire et le relance après un délai s'il meurt.
 
 Une fois le niveau 4 atteint, les joueurs ne cherchent plus de pierres et
@@ -66,10 +66,11 @@ se concentrent sur la nourriture et l'exploration.
 
 ## Communication réseau
 
-Chaque commande part avec un `\n` final ; la réponse est lue octet par
-octet jusqu'au prochain `\n`. Une réponse `dead` fait quitter le programme
-proprement (code `0`) ; une connexion fermée par le serveur fait quitter
-avec le code `84`.
+Chaque commande part avec un `\n` final. Les fragments TCP sont accumulés
+dans un buffer jusqu'au prochain `\n` et les lignes déjà reçues restent
+disponibles pour la commande suivante. Une réponse `dead` fait quitter le
+programme proprement (code `0`) ; une connexion fermée par le serveur fait
+quitter avec le code `84`.
 
 ## Documentation liée
 

@@ -2,10 +2,10 @@ from math import isqrt
 from random import choice
 
 FOOD_SURVIVAL_LIMIT = 8
-FOOD_RESERVE_TARGET = 30
+FOOD_RESERVE_TARGET = 15
 TARGET_LEVEL = 4
-SURVIVAL_MOVES = ["Forward", "Left", "Right"]
 EXPLORATION_FORWARD_TARGETS = ["food", "linemate", "deraumere"]
+EXPLORATION_MOVES = ["Forward", "Forward", "Forward", "Left", "Right"]
 INCANTATION_STONES = {1: {"linemate": 1},
     2: {"linemate": 1, "deraumere": 1, "sibur": 1},
     3: {"linemate": 2, "sibur": 1, "phiras": 2},}
@@ -77,15 +77,10 @@ def count_visible_item(tile, item):
 
 def choose_exploration_command(tile):
 
-    player_count = count_visible_item(tile, "player")
-
     for resource in EXPLORATION_FORWARD_TARGETS:
         if resource in tile:
             return "Forward"
-    if len(tile) == 0 or len(tile) == player_count:
-        return "Forward"
-
-    return choice(SURVIVAL_MOVES)
+    return choice(EXPLORATION_MOVES)
 
 
 def has_required_stones_for_level(level, inventory, tile):
