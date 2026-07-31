@@ -61,14 +61,16 @@ def receive_response_from_server(server_connection, expected_command=None):
         if normal_text == "dead":
             sys.exit(0)
         if normal_text.startswith("message "):
-            from incantation import remember_incantation_call
 
-            remember_incantation_call(normal_text)
+            from coordination import handle_broadcast_message
+
+            handle_broadcast_message(normal_text)
             continue
         if normal_text.startswith("eject:"):
             continue
         if normal_text.startswith("Current level:"):
-            from incantation import update_player_level
+
+            from coordination import update_player_level
 
             level_updated = update_player_level(normal_text)
             if expected_command == "Incantation":

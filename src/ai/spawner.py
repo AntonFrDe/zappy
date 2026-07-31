@@ -59,12 +59,12 @@ def set_start_command(host, port, team, player_number):
     global START_COMMAND, PLAYER_NUMBER, LOCK_PREFIX, PLAYER_SLOT_LOCK
 
     PLAYER_NUMBER = player_number
-    START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port),
-        "-n", team, "-h", host]
+    START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port), "-n", team, "-h", host]
     lock_key = (host + "\0" + str(port) + "\0" + team).encode()
     lock_id = sha256(lock_key).hexdigest()[:20]
     LOCK_PREFIX = Path(gettempdir()) / ("zappy_ai_" + lock_id)
     PLAYER_SLOT_LOCK = try_acquire_lock("player_" + str(player_number))
+
     if PLAYER_SLOT_LOCK is None:
         stop_with_error("player slot " + str(player_number) + " is already active")
     if player_number == 1:
@@ -99,8 +99,7 @@ def start_new_ai():
     try:
         child = subprocess.Popen(command, close_fds=True)
     except OSError:
-        PLAYER_RETRY_AFTER[player_number] = (time.monotonic()
-            + SPAWN_RETRY_DELAY)
+        PLAYER_RETRY_AFTER[player_number] = (time.monotonic() + SPAWN_RETRY_DELAY)
         return False
     CHILDREN[player_number] = child
     PLAYER_RETRY_AFTER.pop(player_number, None)

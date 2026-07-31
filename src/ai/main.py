@@ -11,10 +11,9 @@ for import_path in (AI_DIR, PROJECT_AI_DIR):
 
 from bot import run_ai_loop
 from client import (ANSWER_WAIT, CONNECT_WAIT, SAVED_ANSWERS,
-    join_team, stop_with_error)
-from incantation import set_team_name
+join_team, stop_with_error)
 from spawner import set_start_command
-from team import TEAM_SIZE
+from team import TEAM_SIZE, set_team_name
 
 
 def read_and_get_arguments(argument_type, default=None):

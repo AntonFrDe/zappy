@@ -1,12 +1,10 @@
 from client import send_command_to_server
-from incantation import (cancel_incantation_wait,
-    follow_incantation_call,
-    advance_coordination_turn,
-    get_player_resource_targets,
+from coordination import (advance_coordination_turn,
+    cancel_incantation_wait,
+    is_waiting_for_incantation,)
+from incantation import (follow_incantation_call,
     get_resource_priority,
-    is_waiting_for_incantation,
     request_incantation_help,
-    share_team_status,
     try_current_incantation,)
 from spawner import try_create_team_slot
 from strategy import (FOOD_RESERVE_TARGET,
@@ -17,6 +15,7 @@ from strategy import (FOOD_RESERVE_TARGET,
     get_current_tile,
     get_missing_stones_for_requirements,
     parse_inventory_response,)
+from team import get_player_resource_targets, share_team_status
 
 SURVIVAL_CONNECTIONS = set()
 SURVIVAL_PATHS = {}
@@ -24,8 +23,7 @@ SURVIVAL_PATHS = {}
 
 def next_survival_move(server_connection):
 
-    path = SURVIVAL_PATHS.setdefault(server_connection,
-        {"run_length": 3, "steps_left": 3, "turns": 0,})
+    path = SURVIVAL_PATHS.setdefault(server_connection, {"run_length": 3, "steps_left": 3, "turns": 0,})
 
     if path["steps_left"] > 0:
         path["steps_left"] -= 1
@@ -41,6 +39,7 @@ def next_survival_move(server_connection):
 def keep_player_alive(server_connection, inventory=None):
 
     was_surviving = server_connection in SURVIVAL_CONNECTIONS
+
     if inventory is None:
         response = send_command_to_server(server_connection, "Inventory")
         inventory = parse_inventory_response(response)
@@ -114,8 +113,7 @@ def move_toward_visible_item(server_connection, look, item, take_on_arrival=Fals
 
 def take_food_to_target(server_connection, inventory, tile, target):
 
-    food_to_take = min(count_visible_item(tile, "food"),
-        max(target - inventory.get("food", 0), 0))
+    food_to_take = min(count_visible_item(tile, "food"), max(target - inventory.get("food", 0), 0))
 
     if food_to_take == 0:
         return False
@@ -178,5 +176,4 @@ def run_ai_loop(server_connection):
             continue
         if collect_useful_resource(server_connection, inventory, tile):
             continue
-        send_command_to_server(server_connection,
-            choose_exploration_command(tile))
+        send_command_to_server(server_connection, choose_exploration_command(tile))
