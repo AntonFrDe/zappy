@@ -21,8 +21,7 @@ SURVIVAL_STATE = {
     "active": False,
     "run_length": 3,
     "steps_left": 3,
-    "turns": 0,
-}
+    "turns": 0,}
 
 
 def next_survival_move():
@@ -57,8 +56,7 @@ def keep_player_alive(server_connection, inventory=None):
     look = send_command_to_server(server_connection, "Look")
     tile = get_current_tile(look)
 
-    if take_food_to_target(server_connection, inventory, tile,
-            FOOD_RESERVE_TARGET):
+    if take_food_to_target(server_connection, inventory, tile, FOOD_RESERVE_TARGET):
         return True
 
     if move_toward_visible_item(server_connection, look, "food", True):

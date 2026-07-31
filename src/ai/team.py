@@ -171,14 +171,17 @@ def share_team_status(server_connection, inventory=None):
     if not STATE.team_name:
         return False
     STATE.team_status_turns += 1
+
     if STATE.team_status_turns < TEAM_STATUS_INTERVAL:
         return False
     STATE.team_status_turns = 0
     message = ("team_status|" + STATE.team_name + "|" + str(STATE.player_level) + "|" + STATE.player_id)
+
     if inventory is not None:
         values = [str(inventory.get(resource, 0))
             for resource in TEAM_STATUS_RESOURCES]
         message += "|" + "|".join(values)
+
     send_command_to_server(server_connection, "Broadcast " + message)
     return True
 

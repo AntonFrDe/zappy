@@ -57,9 +57,11 @@ def try_current_incantation(server_connection, inventory, tile):
         return False
     if inventory.get("food", 0) < 2:
         return False
+
     minimum_players = INCANTATION_PLAYERS[STATE.player_level]
     required_players = get_group_size(STATE.player_level)
     cohort = (STATE.player_id,)
+
     if minimum_players > 1:
         call = get_call_to_follow()
         if call is None or call.caller_id != STATE.player_id:
@@ -69,6 +71,7 @@ def try_current_incantation(server_connection, inventory, tile):
             return False
         if not all_cohort_players_are_ready(call):
             return False
+
     if count_visible_item(tile, "player") < len(cohort):
         return False
     if not has_required_stones_for_level(
@@ -77,15 +80,17 @@ def try_current_incantation(server_connection, inventory, tile):
     if not place_missing_stones_for_level(
             server_connection, inventory, tile, STATE.player_level):
         return False
+
     response = send_command_to_server(server_connection, "Incantation")
+
     if update_player_level(response):
         return True
     if response != "Elevation underway":
         STATE.ready_players.clear()
         return False
-    level_response = receive_response_from_server(
-        server_connection, "Incantation")
+    level_response = receive_response_from_server(server_connection, "Incantation")
     level_up = update_player_level(level_response)
+
     if not level_up:
         STATE.ready_players.clear()
     return level_up
@@ -130,8 +135,8 @@ def broadcast_incantation_help(server_connection):
     else:
         STATE.incantation_session_id = call.session_id
         cohort = call.cohort
-    STATE.incantation_calls[STATE.player_id] = IncantationCall(STATE.player_id, 0, STATE.player_level, STATE.coordination_turn, STATE.incantation_session_id,
-    cohort,)
+    STATE.incantation_calls[STATE.player_id] = IncantationCall(STATE.player_id, 0, STATE.player_level, STATE.coordination_turn,
+    STATE.incantation_session_id, cohort,)
     message = ("incantation_request|" + STATE.team_name + "|" + str(STATE.player_level) + "|" + STATE.player_id + "|"
     + STATE.incantation_session_id + "|" + ",".join(cohort))
 
@@ -207,6 +212,7 @@ def follow_incantation_call(server_connection, inventory):
 
     STATE.waiting_for_incantation = False
     STATE.arrival_confirmation_caller = None
+
     if call.direction in (1, 2, 8):
         send_command_to_server(server_connection, "Forward")
         return True
