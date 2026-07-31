@@ -1,4 +1,5 @@
 #include "../../include/server/map.h"
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -91,14 +92,42 @@ static uint32_t count_resource_on_map(map_t *map, int r)
     return total;
 }
 
+static bool already_listed(tile_pos_t *changed, int count, int64_t x,
+    int64_t y)
+{
+    for (int i = 0; i < count; i++)
+        if (changed[i].x == x && changed[i].y == y)
+            return true;
+    return false;
+}
+
+// false si ca deborde (ou si pas de liste du tout)
+static bool track_change(map_t *map, tile_pos_t *changed, int *count,
+    int max, uint64_t idx)
+{
+    int64_t x = (int64_t)(idx % map->width);
+    int64_t y = (int64_t)(idx / map->width);
+
+    if (changed != NULL && already_listed(changed, *count, x, y))
+        return true;
+    if (changed == NULL || *count >= max)
+        return false;
+    changed[*count].x = x;
+    changed[*count].y = y;
+    (*count)++;
+    return true;
+}
+
 // ne rajoute que ce qui manque pour atteindre la cible (jamais de doublon)
-void map_spawn_resources(map_t *map)
+int map_spawn_resources(map_t *map, tile_pos_t *changed, int max)
 {
     uint64_t nb_tiles = map->width * map->height;
     uint32_t target;
     uint32_t current;
     uint32_t missing;
     uint64_t idx;
+    int count = 0;
+    bool overflow = false;
 
     for (int r = 0; r < RESOURCE_COUNT; r++) {
         target = resource_count_for(map->width, map->height, RESOURCE_DENSITY[r]);
@@ -106,10 +135,14 @@ void map_spawn_resources(map_t *map)
         missing = target > current ? target - current : 0;
         for (uint32_t i = 0; i < missing; i++) {
             idx = (uint64_t)rand() % nb_tiles;
-            if (map->tiles[idx].quantities[r] < UINT16_MAX)
-                map->tiles[idx].quantities[r]++;
+            if (map->tiles[idx].quantities[r] >= UINT16_MAX)
+                continue;
+            map->tiles[idx].quantities[r]++;
+            if (!track_change(map, changed, &count, max, idx))
+                overflow = true;
         }
     }
+    return overflow ? -1 : count;
 }
 
 static const char *RESOURCE_NAMES[RESOURCE_COUNT] = {

@@ -161,7 +161,7 @@ Test(map, spawn_matches_subject_example_10x10)
 {
     map_t *map = map_create(10, 10);
 
-    map_spawn_resources(map);
+    map_spawn_resources(map, NULL, 0);
     cr_assert_eq(total_of(map, RESOURCE_FOOD), (uint32_t)50);
     cr_assert_eq(total_of(map, RESOURCE_LINEMATE), (uint32_t)30);
     cr_assert_eq(total_of(map, RESOURCE_DERAUMERE), (uint32_t)15);
@@ -178,8 +178,114 @@ Test(map, spawn_guarantees_at_least_one_of_each_on_tiny_map)
 {
     map_t *map = map_create(2, 2);
 
-    map_spawn_resources(map);
+    map_spawn_resources(map, NULL, 0);
     for (int r = 0; r < RESOURCE_COUNT; r++)
         cr_assert_geq(total_of(map, r), (uint32_t)1);
+    map_destroy(map);
+}
+
+// remplit la map pile a la densite cible, comme apres un premier spawn
+static void fill_to_target(map_t *map)
+{
+    map_spawn_resources(map, NULL, 0);
+}
+
+// enleve nb unites de r la ou il y en a vraiment (les positions sont
+// random, on peut pas viser une case en particulier)
+static void remove_resource(map_t *map, resource_t r, int nb)
+{
+    uint64_t tiles = map->width * map->height;
+
+    for (uint64_t i = 0; i < tiles && nb > 0; i++)
+        while (map->tiles[i].quantities[r] > 0 && nb > 0) {
+            map->tiles[i].quantities[r]--;
+            nb--;
+        }
+    cr_assert_eq(nb, 0, "pas assez de ressource %d a enlever", (int)r);
+}
+
+// rien ne manque -> aucune case touchee, donc aucun bct a pousser.
+// c'est le test central de #24: pas de blast de toute la map
+Test(map, spawn_reports_no_change_when_nothing_is_missing)
+{
+    map_t *map = map_create(5, 5);
+    tile_pos_t changed[64];
+
+    fill_to_target(map);
+    cr_assert_eq(map_spawn_resources(map, changed, 64), 0);
+    map_destroy(map);
+}
+
+// une seule ressource retiree -> exactement une case touchee
+Test(map, spawn_reports_one_tile_when_one_resource_is_missing)
+{
+    map_t *map = map_create(5, 5);
+    tile_pos_t changed[64];
+
+    fill_to_target(map);
+    remove_resource(map, RESOURCE_FOOD, 1);
+    cr_assert_eq(map_spawn_resources(map, changed, 64), 1);
+    map_destroy(map);
+}
+
+// toutes les cases reportees doivent vraiment avoir bouge. le snapshot est
+// pris apres le retrait: spawn ne fait qu'incrementer, donc une case
+// touchee differe forcement de l'etat au moment de l'appel
+Test(map, spawn_only_reports_tiles_that_really_changed)
+{
+    map_t *map = map_create(6, 6);
+    tile_pos_t changed[512];
+    tile_t before[36];
+    int count;
+    int idx;
+
+    fill_to_target(map);
+    remove_resource(map, RESOURCE_FOOD, 3);
+    remove_resource(map, RESOURCE_SIBUR, 2);
+    for (int i = 0; i < 36; i++)
+        before[i] = map->tiles[i];
+    count = map_spawn_resources(map, changed, 512);
+    cr_assert_gt(count, 0);
+    cr_assert_leq(count, 5);
+    for (int i = 0; i < count; i++) {
+        idx = (int)(changed[i].y * 6 + changed[i].x);
+        cr_assert_neq(memcmp(&before[idx], &map->tiles[idx], sizeof(tile_t)),
+            0, "case %d %d reportee mais identique", (int)changed[i].x,
+            (int)changed[i].y);
+    }
+    map_destroy(map);
+}
+
+// carte 1x1: les 7 ressources tombent forcement sur la mm case, il ne
+// doit y avoir qu'une seule entree
+Test(map, spawn_does_not_report_the_same_tile_twice)
+{
+    map_t *map = map_create(1, 1);
+    tile_pos_t changed[16];
+
+    cr_assert_eq(map_spawn_resources(map, changed, 16), 1);
+    cr_assert_eq(changed[0].x, (int64_t)0);
+    cr_assert_eq(changed[0].y, (int64_t)0);
+    map_destroy(map);
+}
+
+// liste trop petite -> -1, l'appelant devra pousser toute la map
+Test(map, spawn_returns_minus_one_when_list_overflows)
+{
+    map_t *map = map_create(10, 10);
+    tile_pos_t changed[2];
+
+    cr_assert_eq(map_spawn_resources(map, changed, 2), -1);
+    map_destroy(map);
+}
+
+// sans liste -> -1, mais la map est remplie normalement
+Test(map, spawn_without_list_still_fills_the_map)
+{
+    map_t *map = map_create(10, 10);
+
+    cr_assert_eq(map_spawn_resources(map, NULL, 0), -1);
+    cr_assert_eq(total_of(map, RESOURCE_FOOD), (uint32_t)50);
+    cr_assert_eq(total_of(map, RESOURCE_THYSTAME), (uint32_t)5);
     map_destroy(map);
 }

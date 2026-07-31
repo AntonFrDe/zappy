@@ -103,21 +103,6 @@ static bool parse_freq(const char *arg, uint16_t *out)
     return true;
 }
 
-// bct X Y q0..q6, au demandeur seulement (pas un gui_notify_* qui broadcast)
-static void send_tile(client_t *gui, map_t *map, int64_t x, int64_t y)
-{
-    tile_t *tile = map_get_tile(map, x, y);
-    char msg[128];
-    int len = snprintf(msg, sizeof(msg), "bct %lld %lld",
-        (long long)x, (long long)y);
-
-    for (int r = 0; r < RESOURCE_COUNT && len < (int)sizeof(msg); r++)
-        len += snprintf(msg + len, sizeof(msg) - (size_t)len, " %u",
-            tile->quantities[r]);
-    snprintf(msg + len, sizeof(msg) - (size_t)len, "\n");
-    client_queue_send(gui, msg);
-}
-
 static void request_msz(server_t *server, client_t *gui, const char *arg)
 {
     char msg[64];
@@ -158,7 +143,7 @@ static void request_bct(server_t *server, client_t *gui, const char *arg)
         client_queue_send(gui, "sbp\n");
         return;
     }
-    send_tile(gui, server->map, x, y);
+    gui_send_tile(gui, server->map, x, y);
 }
 
 static void request_mct(server_t *server, client_t *gui, const char *arg)
@@ -166,7 +151,7 @@ static void request_mct(server_t *server, client_t *gui, const char *arg)
     (void)arg;
     for (uint64_t y = 0; y < server->map->height; y++)
         for (uint64_t x = 0; x < server->map->width; x++)
-            send_tile(gui, server->map, (int64_t)x, (int64_t)y);
+            gui_send_tile(gui, server->map, (int64_t)x, (int64_t)y);
 }
 
 static void request_ppo(server_t *server, client_t *gui, const char *arg)

@@ -151,12 +151,47 @@ static bool check_food(server_t *server, int idx)
     return false;
 }
 
+// au dela on renvoie toute la map, ca coute moins cher que de suivre
+#define SPAWN_MAX_TRACKED 256
+
+static bool has_gui(server_t *server)
+{
+    for (int i = 1; i < server->nfds; i++)
+        if (server->clients[i]->is_graphic)
+            return true;
+    return false;
+}
+
+// -1 = trop de cases touchees (ou pas suivies), on renvoie tout
+static void push_changed_tiles(server_t *server, tile_pos_t *changed,
+    int count)
+{
+    if (count >= 0) {
+        for (int i = 0; i < count; i++)
+            gui_notify_tile(server, changed[i].x, changed[i].y);
+        return;
+    }
+    for (uint64_t y = 0; y < server->map->height; y++)
+        for (uint64_t x = 0; x < server->map->width; x++)
+            gui_notify_tile(server, (int64_t)x, (int64_t)y);
+}
+
 // respawn periodique (cf sujet: "upon starting and every 20 time units")
 static void spawn_resources_if_ready(server_t *server)
 {
+    tile_pos_t changed[SPAWN_MAX_TRACKED];
+    int count;
+
     if (!is_ready(server->next_resource_spawn))
         return;
-    map_spawn_resources(server->map);
+    // sans GUI branchee on formate aucun bct
+    if (!has_gui(server)) {
+        map_spawn_resources(server->map, NULL, 0);
+        server->next_resource_spawn = compute_ready_at(20, server->cfg->freq);
+        return;
+    }
+    count = map_spawn_resources(server->map, changed, SPAWN_MAX_TRACKED);
+    push_changed_tiles(server, changed, count);
     server->next_resource_spawn = compute_ready_at(20, server->cfg->freq);
 }
 

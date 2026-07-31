@@ -27,18 +27,33 @@ void gui_notify_inventory(server_t *server, client_t *client)
     gui_broadcast(server, msg);
 }
 
-static void send_bct(client_t *gui, map_t *map, int64_t x, int64_t y)
+static void format_bct(char *msg, size_t size, map_t *map, int64_t x,
+    int64_t y)
 {
     tile_t *tile = map_get_tile(map, x, y);
-    char msg[128];
-    int len = snprintf(msg, sizeof(msg), "bct %lld %lld",
+    int len = snprintf(msg, size, "bct %lld %lld",
         (long long)x, (long long)y);
 
-    for (int r = 0; r < RESOURCE_COUNT && len < (int)sizeof(msg); r++)
-        len += snprintf(msg + len, sizeof(msg) - (size_t)len, " %u",
+    for (int r = 0; r < RESOURCE_COUNT && len < (int)size; r++)
+        len += snprintf(msg + len, size - (size_t)len, " %u",
             tile->quantities[r]);
-    snprintf(msg + len, sizeof(msg) - (size_t)len, "\n");
+    snprintf(msg + len, size - (size_t)len, "\n");
+}
+
+void gui_send_tile(client_t *gui, map_t *map, int64_t x, int64_t y)
+{
+    char msg[128];
+
+    format_bct(msg, sizeof(msg), map, x, y);
     client_queue_send(gui, msg);
+}
+
+void gui_notify_tile(server_t *server, int64_t x, int64_t y)
+{
+    char msg[128];
+
+    format_bct(msg, sizeof(msg), server->map, x, y);
+    gui_broadcast(server, msg);
 }
 
 void gui_send_snapshot(server_t *server, client_t *gui)
@@ -58,7 +73,7 @@ void gui_send_snapshot(server_t *server, client_t *gui)
     }
     for (uint64_t y = 0; y < server->map->height; y++)
         for (uint64_t x = 0; x < server->map->width; x++)
-            send_bct(gui, server->map, (int64_t)x, (int64_t)y);
+            gui_send_tile(gui, server->map, (int64_t)x, (int64_t)y);
     for (int i = 1; i < server->nfds; i++) {
         other = server->clients[i];
         if (other->player == NULL)
