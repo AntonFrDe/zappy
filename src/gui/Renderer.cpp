@@ -254,14 +254,7 @@ namespace {
 bool loadAnySystemFont(sf::Font &font)
 {
     static const char *kCandidatePaths[] = {
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "C:\\Windows\\Fonts\\arialbd.ttf",
-        "C:\\Windows\\Fonts\\arial.ttf",
+        "assets/fonts/arial.ttf",
     };
 
     for (const char *path : kCandidatePaths)
@@ -346,15 +339,9 @@ void Renderer::pollEvents()
         }
 
         // La reponse effective au redimensionnement (recalcul du viewport
-        // letterboxe) se fait chaque frame dans updateMapView(), a partir
-        // de _window.getSize() qui reflete deja la nouvelle taille : on
-        // consomme quand meme l'evenement explicitement pour ne pas
-        // laisser SFML avec une vue par defaut perimee entre deux frames.
-        if (event.type == sf::Event::Resized) {
-            sf::FloatRect visibleArea(0.f, 0.f,
-                static_cast<float>(event.size.width), static_cast<float>(event.size.height));
-            _window.setView(sf::View(visibleArea));
-        }
+        // letterboxe pour la carte, et de la vue ecran pour le HUD) se
+        // fait chaque frame dans draw(), a partir de _window.getSize()
+        // qui reflete deja la nouvelle taille : rien a faire ici.
 
         if (event.type == sf::Event::MouseWheelScrolled) {
             float factor = event.mouseWheelScroll.delta > 0.f ? 1.1f : (1.f / 1.1f);
@@ -1093,7 +1080,16 @@ void Renderer::draw(GameState &state, float dt)
 
     // HUD et bandeau de fin : coordonnees ecran fixes, jamais affectees
     // par le zoom/pan de la carte.
-    _window.setView(_window.getDefaultView());
+    // NB: on reconstruit la vue depuis la taille actuelle de la fenetre
+    // plutot que d'utiliser _window.getDefaultView(), qui reste figee sur
+    // la taille de la fenetre au moment de sa creation et ne suit pas les
+    // redimensionnements (ex: passage en plein ecran) : avec l'ancienne
+    // vue par defaut perimee, le HUD (dessine en coordonnees ecran issues
+    // de la taille reelle et a jour de la fenetre) se retrouvait hors du
+    // rectangle visible et disparaissait.
+    sf::Vector2u screenSize = _window.getSize();
+    _window.setView(sf::View(sf::FloatRect(0.f, 0.f,
+        static_cast<float>(screenSize.x), static_cast<float>(screenSize.y))));
     drawHud(state);
     drawMessageLog(state);
     drawGameOverBanner(state);
