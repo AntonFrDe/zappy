@@ -1,5 +1,3 @@
-import time
-
 from coordination_state import IncantationCall, STATE
 
 CALL_LIFETIME_TURNS = 64
@@ -64,7 +62,7 @@ def handle_broadcast_message(message):
 def save_team_presence(player_id):
 
     if player_id and player_id != STATE.player_id:
-        STATE.team_peers[player_id] = time.monotonic()
+        STATE.team_peers[player_id] = STATE.coordination_turn
 
 
 def save_incantation_call(direction, level_text, caller_id, session_id):

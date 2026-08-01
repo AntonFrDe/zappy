@@ -21,7 +21,7 @@ class CoordinationState:
     last_followed_call: tuple | None = None
     ready_player_id: str | None = None
     waiting_for_incantation: bool = False
-    team_peers: dict[str, float] = field(default_factory=dict)
+    team_peers: dict[str, int] = field(default_factory=dict)
 
 
 STATE = CoordinationState()
