@@ -1,3 +1,5 @@
+import time
+
 from coordination_state import IncantationCall, STATE
 
 CALL_LIFETIME_TURNS = 64
@@ -46,6 +48,10 @@ def handle_broadcast_message(message):
 
     message_parts = payload.split("|")
 
+    if len(message_parts) == 3 and message_parts[0] == "team_presence":
+        if message_parts[1] == STATE.team_name:
+            save_team_presence(message_parts[2])
+        return
     if len(message_parts) == 5 and message_parts[0] == "incantation_request":
         if message_parts[1] == STATE.team_name:
             save_incantation_call(direction, *message_parts[2:])
@@ -53,6 +59,12 @@ def handle_broadcast_message(message):
     if len(message_parts) == 6 and message_parts[0] == "incantation_ready":
         if message_parts[1] == STATE.team_name:
             save_ready_player(direction, *message_parts[2:])
+
+
+def save_team_presence(player_id):
+
+    if player_id and player_id != STATE.player_id:
+        STATE.team_peers[player_id] = time.monotonic()
 
 
 def save_incantation_call(direction, level_text, caller_id, session_id):
@@ -127,6 +139,7 @@ def update_player_level(response):
         return False
     if level < 1 or level > 8:
         return False
+
     STATE.player_level = level
     reset_incantation_call()
     return True

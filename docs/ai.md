@@ -58,8 +58,14 @@ puissent reprendre leur exploration.
 
 L'IA lance au maximum deux joueurs, le nombre exact nécessaire pour
 atteindre le niveau 4. Le protocole de coordination est volontairement
-limité à un chef et un partenaire. Le gestionnaire surveille un seul
-processus partenaire et le relance après un délai s'il meurt.
+limité à un chef et un partenaire. Chaque joueur annonce périodiquement
+sa présence par `Broadcast`. Parmi les joueurs actifs, le plus petit
+identifiant devient gestionnaire et utilise `Connect_nbr` puis, si
+nécessaire, `Fork` pour créer le partenaire manquant. Si le gestionnaire
+disparaît, sa présence expire et le survivant prend automatiquement sa
+place. Plusieurs processus initiaux d'une même équipe élisent ainsi un
+seul gestionnaire, et ceux qui dépassent la limite de deux joueurs se
+retirent proprement. Aucune donnée de coordination ne passe hors du serveur.
 
 Une fois le niveau 4 atteint, les joueurs ne cherchent plus de pierres et
 se concentrent sur la nourriture et l'exploration.

@@ -6,7 +6,9 @@ from coordination_state import STATE
 from incantation import (follow_incantation_call,
     request_incantation_help,
     try_current_incantation,)
-from spawner import try_create_team_slot
+from spawner import (is_excess_team_player,
+    try_create_team_slot,
+    update_team_presence,)
 from strategy import (FOOD_RESERVE_TARGET,
     FOOD_SURVIVAL_LIMIT,
     INCANTATION_STONES,
@@ -36,8 +38,7 @@ def move_toward_item(server_connection, look, item, take=False):
 
 def take_food(server_connection, inventory, tile, target):
 
-    amount = min(count_visible_item(tile, "food"),
-        max(target - inventory.get("food", 0), 0))
+    amount = min(count_visible_item(tile, "food"), max(target - inventory.get("food", 0), 0))
 
     for _ in range(amount):
         if send_command_to_server(server_connection, "Take food") != "ok":
@@ -102,6 +103,9 @@ def run_ai_loop(server_connection):
         response = send_command_to_server(server_connection, "Inventory")
         inventory = parse_inventory_response(response)
         advance_coordination_turn()
+        update_team_presence(server_connection)
+        if is_excess_team_player():
+            return
         if is_waiting_for_incantation():
             if handle_waiting_incantation(server_connection, inventory):
                 continue
@@ -116,8 +120,7 @@ def run_ai_loop(server_connection):
         tile = get_current_tile(look)
 
         if inventory.get("food", 0) < FOOD_RESERVE_TARGET:
-            if take_food(server_connection, inventory, tile,
-                    FOOD_RESERVE_TARGET):
+            if take_food(server_connection, inventory, tile, FOOD_RESERVE_TARGET):
                 continue
             if move_toward_item(server_connection, look, "food", True):
                 continue
