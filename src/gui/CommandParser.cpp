@@ -38,6 +38,15 @@ void CommandParser::registerHandlers()
 
 namespace {
 constexpr int kMaxMapDimension = 10000;
+constexpr int kElevationCost[7][RESOURCE_COUNT] = {
+    /* niveau 1 */ {0, 1, 0, 0, 0, 0, 0},
+    /* niveau 2 */ {0, 1, 1, 1, 0, 0, 0},
+    /* niveau 3 */ {0, 2, 0, 1, 0, 2, 0},
+    /* niveau 4 */ {0, 1, 1, 2, 0, 1, 0},
+    /* niveau 5 */ {0, 1, 2, 1, 3, 0, 0},
+    /* niveau 6 */ {0, 1, 2, 3, 0, 1, 0},
+    /* niveau 7 */ {0, 2, 2, 2, 2, 2, 1},
+};
 }
 
 int CommandParser::parseId(const std::string &token)
@@ -400,6 +409,14 @@ void CommandParser::handlePie(std::istringstream &args)
     {
         rit->active = false;
         rit->result = result ? 1 : 0;
+
+        if (result && rit->level >= 1 && rit->level <= 7)
+        {
+            Tile &tile = _state.tileAt(x, y);
+            const int *cost = kElevationCost[rit->level - 1];
+            for (int i = 0; i < RESOURCE_COUNT; ++i)
+                tile.resources[i] = std::max(0, tile.resources[i] - cost[i]);
+        }
     }
 
     std::cout << "[parser] fin d'incantation en (" << x << "," << y << ") -> "
