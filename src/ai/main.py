@@ -14,7 +14,7 @@ from client import ANSWER_WAIT, CONNECT_WAIT, join_team, stop_with_error
 from coordination import set_team_name
 from spawner import set_start_command
 
-ARGUMENTS = {"-p", "-n", "-h", "-i"}
+ARGUMENTS = {"-p", "-n", "-h"}
 
 
 def print_usage():
@@ -32,7 +32,7 @@ def read_settings():
     if len(arguments) % 2 != 0:
         stop_with_error("every option requires a value")
 
-    values = {"-h": "localhost", "-i": "1"}
+    values = {"-h": "localhost"}
 
     for flag, value in zip(arguments[::2], arguments[1::2]):
         if flag not in ARGUMENTS:
@@ -45,15 +45,12 @@ def read_settings():
         stop_with_error("-p and -n are required")
     try:
         port = int(values["-p"])
-        player_number = int(values["-i"])
     except ValueError:
-        stop_with_error("port and player number must be numbers")
+        stop_with_error("port must be a number")
     if not 1 <= port <= 65535:
         stop_with_error("port is out of range")
-    if player_number not in (1, 2):
-        stop_with_error("player number is out of range")
 
-    return values["-h"], port, values["-n"], player_number
+    return values["-h"], port, values["-n"]
 
 
 def main():
@@ -62,9 +59,9 @@ def main():
         print_usage()
         return
 
-    host, port, team, player_number = read_settings()
+    host, port, team = read_settings()
     set_team_name(team)
-    set_start_command(host, port, team, player_number)
+    set_start_command(host, port, team)
 
     try:
         connection = socket.create_connection((host, port), timeout=CONNECT_WAIT)

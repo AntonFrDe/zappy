@@ -10,7 +10,6 @@ from strategy import FOOD_SURVIVAL_LIMIT
 AI_MAIN = Path(__file__).resolve().parent / "main.py"
 START_COMMAND = []
 CHILD_AI = None
-PLAYER_NUMBER = 1
 RETRY_AFTER = 0
 SPAWN_RETRY_DELAY = 2
 TEAM_SIZE = 2
@@ -21,11 +20,10 @@ ELECTION_STARTED_AT = 0
 LAST_PRESENCE_AT = 0
 
 
-def set_start_command(host, port, team, player_number):
+def set_start_command(host, port, team):
 
-    global START_COMMAND, PLAYER_NUMBER, ELECTION_STARTED_AT, LAST_PRESENCE_AT
+    global START_COMMAND, ELECTION_STARTED_AT, LAST_PRESENCE_AT
 
-    PLAYER_NUMBER = player_number
     START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port), "-n", team, "-h", host]
     ELECTION_STARTED_AT = time.monotonic()
     LAST_PRESENCE_AT = 0
@@ -86,11 +84,6 @@ def is_excess_team_player(now=None):
     return STATE.player_id not in selected_players
 
 
-def get_partner_player_number():
-
-    return 2 if PLAYER_NUMBER == 1 else 1
-
-
 def can_start_partner():
 
     global CHILD_AI, RETRY_AFTER
@@ -115,10 +108,8 @@ def start_partner_ai():
     if not START_COMMAND or CHILD_AI is not None:
         return False
 
-    command = START_COMMAND + ["-i", str(get_partner_player_number())]
-
     try:
-        CHILD_AI = subprocess.Popen(command, close_fds=True)
+        CHILD_AI = subprocess.Popen(START_COMMAND, close_fds=True)
     except OSError:
         CHILD_AI = None
         RETRY_AFTER = time.monotonic() + SPAWN_RETRY_DELAY
