@@ -54,9 +54,12 @@ def try_current_incantation(server_connection, inventory, tile):
     if response != "Elevation underway":
         reset_incantation_call()
         return False
+
     response = receive_response_from_server(server_connection, "Incantation")
+
     if update_player_level(response):
         return True
+
     reset_incantation_call()
     return False
 
@@ -117,12 +120,15 @@ def follow_incantation_call(server_connection, inventory):
         place_missing_stones(server_connection, inventory, tile)
         say_ready(server_connection, call)
         return True
+
     STATE.waiting_for_incantation = False
+
     if call.direction in (1, 2, 8):
         command = "Forward"
     elif call.direction in (3, 4):
         command = "Left"
     else:
         command = "Right"
+
     send_command_to_server(server_connection, command)
     return True
