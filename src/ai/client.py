@@ -36,6 +36,7 @@ def read_server_line(server_connection):
 def receive_response_from_server(server_connection, expected_command=None):
 
     while True:
+
         normal_text = read_server_line(server_connection)
 
         if normal_text == "dead":

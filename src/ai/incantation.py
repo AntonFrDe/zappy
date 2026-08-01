@@ -20,13 +20,16 @@ def place_missing_stones(server_connection, inventory, tile):
     requirements = INCANTATION_STONES.get(STATE.player_level, {})
 
     for resource, required in requirements.items():
+
         missing = max(required - count_visible_item(tile, resource), 0)
+
         if inventory.get(resource, 0) < missing:
             return False
         for _ in range(missing):
             if send_command_to_server(server_connection, "Set " + resource) != "ok":
                 return False
             inventory[resource] -= 1
+
     return True
 
 
@@ -37,7 +40,9 @@ def try_current_incantation(server_connection, inventory, tile):
     if required_players is None or inventory.get("food", 0) < 2:
         return False
     if required_players == 2:
+
         call = get_call_to_follow()
+
         if (call is None or call.caller_id != STATE.player_id or STATE.ready_player_id is None):
             return False
     if count_visible_item(tile, "player") < required_players:

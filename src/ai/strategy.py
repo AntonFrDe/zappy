@@ -44,8 +44,10 @@ def find_visible_item_position(look, item):
     for index, tile in enumerate(tiles):
         if item not in tile:
             continue
+
         row = isqrt(index)
         lateral = index - row * row - row
+
         return row, lateral
     return None
 
@@ -56,7 +58,9 @@ def get_path_to_visible_item(look, item):
 
     if position is None:
         return None
+
     row, lateral = position
+
     if row == 0:
         return []
 
@@ -66,7 +70,9 @@ def get_path_to_visible_item(look, item):
         path.append("Left")
     elif lateral > 0:
         path.append("Right")
+
     path.extend(["Forward"] * abs(lateral))
+
     return path
 
 
@@ -80,6 +86,7 @@ def choose_exploration_command(tile):
     for resource in EXPLORATION_FORWARD_TARGETS:
         if resource in tile:
             return "Forward"
+
     return choice(EXPLORATION_MOVES)
 
 

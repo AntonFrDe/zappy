@@ -33,6 +33,7 @@ def move_toward_item(server_connection, look, item, take=False):
         send_command_to_server(server_connection, command)
     if take:
         send_command_to_server(server_connection, "Take " + item)
+
     return True
 
 
@@ -43,6 +44,7 @@ def take_food(server_connection, inventory, tile, target):
     for _ in range(amount):
         if send_command_to_server(server_connection, "Take food") != "ok":
             break
+
     return amount > 0
 
 
@@ -51,6 +53,7 @@ def keep_player_alive(server_connection, inventory):
     global SURVIVAL_MODE
 
     food = inventory.get("food", 0)
+
     if not SURVIVAL_MODE and food > FOOD_SURVIVAL_LIMIT:
         return False
     if food >= FOOD_RESERVE_TARGET:
@@ -65,6 +68,7 @@ def keep_player_alive(server_connection, inventory):
         return True
     if move_toward_item(server_connection, look, "food", True):
         return True
+
     send_command_to_server(server_connection, choose_exploration_command(tile))
     return True
 
@@ -73,6 +77,7 @@ def collect_missing_stone(server_connection, inventory, look, tile):
 
     if STATE.player_level >= TARGET_LEVEL:
         return False
+
     requirements = INCANTATION_STONES.get(STATE.player_level, {})
 
     for stone in get_missing_stones_for_requirements(requirements, inventory):
@@ -81,6 +86,7 @@ def collect_missing_stone(server_connection, inventory, look, tile):
             return True
         if move_toward_item(server_connection, look, stone, True):
             return True
+
     return False
 
 
@@ -91,8 +97,10 @@ def handle_waiting_incantation(server_connection, inventory):
         return keep_player_alive(server_connection, inventory)
     if follow_incantation_call(server_connection, inventory):
         return True
+
     look = send_command_to_server(server_connection, "Look")
     tile = get_current_tile(look)
+
     return (try_current_incantation(server_connection, inventory, tile)
         or request_incantation_help(server_connection, inventory, tile))
 
@@ -100,10 +108,12 @@ def handle_waiting_incantation(server_connection, inventory):
 def run_ai_loop(server_connection):
 
     while True:
+
         response = send_command_to_server(server_connection, "Inventory")
         inventory = parse_inventory_response(response)
         advance_coordination_turn()
         update_team_presence(server_connection)
+
         if is_excess_team_player():
             return
         if is_waiting_for_incantation():

@@ -125,6 +125,7 @@ def call_was_already_followed(call):
 
     if current_call == STATE.last_followed_call:
         return True
+
     STATE.last_followed_call = current_call
     return False
 

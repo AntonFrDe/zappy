@@ -52,13 +52,13 @@ def update_team_presence(server_connection):
     global LAST_PRESENCE_AT
 
     now = time.monotonic()
-
     remove_missing_players(now)
+
     if not STATE.team_name or now - LAST_PRESENCE_AT < PRESENCE_INTERVAL:
         return False
+
     message = "|".join(("team_presence", STATE.team_name, STATE.player_id))
     LAST_PRESENCE_AT = now
-
     response = send_command_to_server(server_connection, "Broadcast " + message)
     return response == "ok"
 
@@ -70,6 +70,7 @@ def is_team_manager(now=None):
 
     if now - ELECTION_STARTED_AT < ELECTION_DELAY:
         return False
+
     return STATE.player_id == min(players)
 
 
