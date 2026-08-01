@@ -107,10 +107,14 @@ static void accept_new_client(server_t *server)
 
 void disconnect_client(server_t *server, int client_idx)
 {
-    int owner_id = server->clients[client_idx]->id;
+    client_t *client = server->clients[client_idx];
+    int owner_id = client->id;
 
+    if (client->handshake_done && !client->is_graphic
+        && client->player != NULL)
+        gui_notify_death(server, client);
     incantation_unfreeze_players(server, owner_id);
-    client_destroy(server->clients[client_idx]);
+    client_destroy(client);
     for (int i = client_idx; i < server->nfds - 1; i++) {
         server->clients[i] = server->clients[i + 1];
         server->fds[i] = server->fds[i + 1];

@@ -142,7 +142,6 @@ static bool check_food(server_t *server, int idx)
     if (player->inventory[RESOURCE_FOOD] == 0) {
         client_queue_send(client, "dead\n");
         client_flush_send(client);
-        gui_notify_death(server, client);
         disconnect_client(server, idx);
         return true;
     }
