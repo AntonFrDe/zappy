@@ -13,73 +13,76 @@ CHILD_AI = None
 RETRY_AFTER = 0
 SPAWN_RETRY_DELAY = 2
 TEAM_SIZE = 2
-PRESENCE_INTERVAL = 1
-PRESENCE_TIMEOUT = 5
-ELECTION_DELAY = 2
-ELECTION_STARTED_AT = 0
-LAST_PRESENCE_AT = 0
+PRESENCE_INTERVAL_TURNS = 4
+PRESENCE_TIMEOUT_TURNS = 12
+ELECTION_DELAY_TURNS = 2
+ELECTION_STARTED_TURN = 0
+LAST_PRESENCE_TURN = -PRESENCE_INTERVAL_TURNS
 
 
 def set_start_command(host, port, team):
 
-    global START_COMMAND, ELECTION_STARTED_AT, LAST_PRESENCE_AT
+    global START_COMMAND, ELECTION_STARTED_TURN, LAST_PRESENCE_TURN
 
     START_COMMAND = [sys.executable, str(AI_MAIN), "-p", str(port), "-n", team, "-h", host]
-    ELECTION_STARTED_AT = time.monotonic()
-    LAST_PRESENCE_AT = 0
+    ELECTION_STARTED_TURN = STATE.coordination_turn
+    LAST_PRESENCE_TURN = -PRESENCE_INTERVAL_TURNS
     STATE.team_peers.clear()
 
 
-def remove_missing_players(now):
+def remove_missing_players(current_turn):
 
     for player_id, last_seen in list(STATE.team_peers.items()):
-        if now - last_seen > PRESENCE_TIMEOUT:
+        if current_turn - last_seen > PRESENCE_TIMEOUT_TURNS:
             del STATE.team_peers[player_id]
 
 
-def active_team_players(now=None):
+def active_team_players(current_turn=None):
 
-    now = time.monotonic() if now is None else now
-    remove_missing_players(now)
+    current_turn = STATE.coordination_turn if current_turn is None else current_turn
+    remove_missing_players(current_turn)
 
     return {STATE.player_id, *STATE.team_peers}
 
 
 def update_team_presence(server_connection):
 
-    global LAST_PRESENCE_AT
+    global LAST_PRESENCE_TURN
 
-    now = time.monotonic()
-    remove_missing_players(now)
+    current_turn = STATE.coordination_turn
+    remove_missing_players(current_turn)
 
-    if not STATE.team_name or now - LAST_PRESENCE_AT < PRESENCE_INTERVAL:
+    if not STATE.team_name:
+        return False
+    if (STATE.team_peers
+        and current_turn - LAST_PRESENCE_TURN < PRESENCE_INTERVAL_TURNS):
         return False
 
     message = "|".join(("team_presence", STATE.team_name, STATE.player_id))
-    LAST_PRESENCE_AT = now
+    LAST_PRESENCE_TURN = current_turn
     response = send_command_to_server(server_connection, "Broadcast " + message)
     return response == "ok"
 
 
-def is_team_manager(now=None):
+def is_team_manager(current_turn=None):
 
-    now = time.monotonic() if now is None else now
-    players = active_team_players(now)
+    current_turn = STATE.coordination_turn if current_turn is None else current_turn
+    players = active_team_players(current_turn)
 
-    if now - ELECTION_STARTED_AT < ELECTION_DELAY:
+    if current_turn - ELECTION_STARTED_TURN < ELECTION_DELAY_TURNS:
         return False
 
     return STATE.player_id == min(players)
 
 
-def team_needs_partner(now=None):
+def team_needs_partner(current_turn=None):
 
-    return len(active_team_players(now)) < TEAM_SIZE
+    return len(active_team_players(current_turn)) < TEAM_SIZE
 
 
-def is_excess_team_player(now=None):
+def is_excess_team_player(current_turn=None):
 
-    selected_players = sorted(active_team_players(now))[:TEAM_SIZE]
+    selected_players = sorted(active_team_players(current_turn))[:TEAM_SIZE]
 
     return STATE.player_id not in selected_players
 
