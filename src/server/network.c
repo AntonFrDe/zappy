@@ -246,21 +246,24 @@ static int handle_client_events(server_t *server, int i)
     int n;
     short revents = server->fds[i].revents;
 
-    if (revents & POLLIN) {
-        n = client_read(server->clients[i]);
-        if (n <= 0) {
-            disconnect_client(server, i);
-            return 1;
-        }
-        if (process_client_input(server, i))
-            return 1;
-    }
     if (revents & POLLOUT) {
         if (client_flush_send(server->clients[i]) < 0) {
             disconnect_client(server, i);
             return 1;
         }
     }
+
+    if (revents & POLLIN) {
+        n = client_read(server->clients[i]);
+        if (n <= 0) {
+            client_flush_send(server->clients[i]);
+            disconnect_client(server, i);
+            return 1;
+        }
+        if (process_client_input(server, i))
+            return 1;
+    }
+    
     if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
         disconnect_client(server, i);
         return 1;

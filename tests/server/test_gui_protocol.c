@@ -403,3 +403,25 @@ Test(gui_protocol, starvation_death_is_broadcast_as_pdi)
     read_until(gsock, "pdi ", line, sizeof(line));
     cr_assert_str_eq(line, "pdi #1");
 }
+
+// demi-fermeture: le client ferme son cote ecriture mais lit encore.
+// read() renvoie 0 sans que la socket soit morte, le serveur lui doit
+// donc sa reponse avant de couper. "suc" n'apparait jamais dans un
+// snapshot, on ne peut pas le confondre avec autre chose
+Test(gui_protocol, response_survives_a_half_close)
+{
+    flags_t *cfg = alloc_single_team_cfg(5710, 3, 3, 1);
+    pthread_t thread;
+    int gsock;
+    char line[256];
+
+    start_test_server(cfg, &thread);
+    gsock = connect_graphic(cfg->port, line, sizeof(line));
+
+    cr_assert_eq(write(gsock, "pouet\n", 6), 6);
+    cr_assert_eq(shutdown(gsock, SHUT_WR), 0);
+
+    read_until(gsock, "suc", line, sizeof(line));
+    cr_assert_str_eq(line, "suc");
+    close(gsock);
+}
