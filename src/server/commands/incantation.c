@@ -128,6 +128,20 @@ void incantation_notify_start(server_t *server, client_t *client)
         client->player->y, client->player->level, ids, count);
 }
 
+static void incantation_notify_failue(server_t *server, client_t *client)
+{
+    client_t *other;
+
+    client_queue_send(client, "ko\n");
+
+    for (int i = 1; i < server->nfds; i++)  {
+        other = server->clients[i];
+
+        if (other != client && other->incantation_owner_id == client->id)
+            client_queue_send(other, "ko\n");
+    }
+}
+
 void command_incantation(server_t *server, client_t *client, const char *arg)
 {
     const elevation_req_t *req;
@@ -136,12 +150,14 @@ void command_incantation(server_t *server, client_t *client, const char *arg)
     int64_t y = client->player->y;
 
     (void)arg;
+
     if (!incantation_check(server, client)) {
-        client_queue_send(client, "ko\n");
+        incantation_notify_failue(server, client);
         gui_notify_incantation_end(server, x, y, 0);
         incantation_unfreeze_players(server, client->id);
         return;
     }
+
     req = &REQUIREMENTS[client->player->level];
     tile = map_get_tile(server->map, x, y);
     for (int r = 0; r < RESOURCE_COUNT; r++)
