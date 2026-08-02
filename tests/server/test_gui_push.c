@@ -26,6 +26,11 @@ static server_t *make_server(uint64_t width, uint64_t height)
     server->cfg = cfg;
     server->map = map_create(width, height);
     cr_assert_not_null(server->map);
+    // disconnect_client rend le slot depuis #162: sans ce tableau, toute
+    // deconnexion dereference NULL
+    server->slots_remaining = malloc(sizeof(uint16_t) * cfg->teams_nb);
+    cr_assert_not_null(server->slots_remaining);
+    server->slots_remaining[0] = cfg->clients_nb;
     server->listen_fd = -1;
     server->nfds = 1;
     server->next_client_id = 1;
@@ -37,6 +42,7 @@ static void destroy_server(server_t *server)
     for (int i = 1; i < server->nfds; i++)
         client_destroy(server->clients[i]);
     map_destroy(server->map);
+    free(server->slots_remaining);
     free(server->cfg->teams);
     free(server->cfg);
     free(server);
@@ -183,6 +189,9 @@ static client_t *add_player(server_t *server, int64_t x, int64_t y)
     client->player = player_create_at(x, y);
     cr_assert_not_null(client->player);
     client->player->level = 1;
+    // player_create_at laisse next_food_tick non initialise (handle_team_name
+    // le pose en prod). sans ca scheduler_tick declenche une faim au hasard
+    client->player->next_food_tick = compute_ready_at(126, server->cfg->freq);
     server->clients[server->nfds] = client;
     server->fds[server->nfds].fd = -1;
     server->nfds++;
@@ -236,5 +245,78 @@ Test(gui_push, respawn_does_not_fire_twice_in_a_row)
     clear_sent(gui);
     scheduler_tick(server);
     cr_assert_str_eq(sent(gui), "");
+    destroy_server(server);
+}
+
+// force l'echeance de faim dans le passe
+static void make_food_tick_due(client_t *client)
+{
+    client->player->next_food_tick = (struct timespec){0, 0};
+}
+
+// absorbe le respawn du premier tick, sinon des bct polluent la mesure
+static void settle(server_t *server, client_t *gui)
+{
+    map_spawn_resources(server->map, NULL, 0);
+    make_respawn_due(server);
+    scheduler_tick(server);
+    clear_sent(gui);
+}
+
+// la faim baisse en continu: sans pin l'inventaire affiche par la GUI
+// derive toute la partie
+Test(gui_push, food_tick_pushes_pin_with_the_new_count)
+{
+    server_t *server = make_server(5, 5);
+    client_t *gui = add_gui(server);
+    client_t *player = add_player(server, 2, 3);
+    char expected[128];
+
+    settle(server, gui);
+    make_food_tick_due(player);
+    scheduler_tick(server);
+
+    snprintf(expected, sizeof(expected), "pin #%d 2 3 9 0 0 0 0 0 0\n",
+        player->id);
+    cr_assert_not_null(strstr(sent(gui), expected), "recu: %s", sent(gui));
+    cr_assert_eq(player->player->inventory[RESOURCE_FOOD], (uint16_t)9);
+    destroy_server(server);
+}
+
+// le joueur meurt: disconnect_client emet deja pdi, un pin ici decrirait
+// l'inventaire d'un client qui n'existe plus
+Test(gui_push, starvation_death_pushes_pdi_but_no_pin)
+{
+    server_t *server = make_server(5, 5);
+    client_t *gui = add_gui(server);
+    client_t *player = add_player(server, 1, 1);
+
+    settle(server, gui);
+    player->player->inventory[RESOURCE_FOOD] = 0;
+    make_food_tick_due(player);
+    scheduler_tick(server);
+
+    cr_assert_not_null(strstr(sent(gui), "pdi "), "recu: %s", sent(gui));
+    cr_assert_null(strstr(sent(gui), "pin "),
+        "pin envoye pour un joueur mort: %s", sent(gui));
+    destroy_server(server);
+}
+
+// un tick de faim ne doit pas relancer un pin tant que 126 u.t. ne sont
+// pas repassees
+Test(gui_push, no_pin_before_the_next_food_tick)
+{
+    server_t *server = make_server(5, 5);
+    client_t *gui = add_gui(server);
+    client_t *player = add_player(server, 0, 0);
+
+    settle(server, gui);
+    make_food_tick_due(player);
+    scheduler_tick(server);
+    clear_sent(gui);
+
+    scheduler_tick(server);
+    cr_assert_str_eq(sent(gui), "");
+    cr_assert_eq(player->player->inventory[RESOURCE_FOOD], (uint16_t)9);
     destroy_server(server);
 }
