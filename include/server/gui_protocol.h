@@ -7,6 +7,9 @@
 // dump complet de l'etat (map, equipes, joueurs, oeufs) a un GRAPHIC qui
 // vient de se connecter
     void gui_send_snapshot(server_t *server, client_t *gui);
+// envoie la suite des bct d'un snapshot en cours, par tranches
+    void gui_pump_snapshot(server_t *server, client_t *gui);
+
 
 // bct X Y q0..q6 a une seule GUI (reponse a une requete)
     void gui_send_tile(client_t *gui, map_t *map, int64_t x, int64_t y);

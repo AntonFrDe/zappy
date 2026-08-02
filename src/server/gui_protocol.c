@@ -27,8 +27,7 @@ void gui_notify_inventory(server_t *server, client_t *client)
     gui_broadcast(server, msg);
 }
 
-static void format_bct(char *msg, size_t size, map_t *map, int64_t x,
-    int64_t y)
+static void format_bct(char *msg, size_t size, map_t *map, int64_t x, int64_t y)
 {
     tile_t *tile = map_get_tile(map, x, y);
     int len = snprintf(msg, size, "bct %lld %lld",
@@ -61,19 +60,16 @@ void gui_send_snapshot(server_t *server, client_t *gui)
     char msg[128];
     client_t *other;
 
-    snprintf(msg, sizeof(msg), "msz %llu %llu\n",
-        (unsigned long long)server->map->width,
-        (unsigned long long)server->map->height);
+    snprintf(msg, sizeof(msg), "msz %llu %llu\n",(unsigned long long)server->map->width, (unsigned long long)server->map->height);
     client_queue_send(gui, msg);
     snprintf(msg, sizeof(msg), "sgt %u\n", server->cfg->freq);
     client_queue_send(gui, msg);
+
     for (int i = 0; i < server->cfg->teams_nb; i++) {
         snprintf(msg, sizeof(msg), "tna %s\n", server->cfg->teams[i]);
         client_queue_send(gui, msg);
     }
-    for (uint64_t y = 0; y < server->map->height; y++)
-        for (uint64_t x = 0; x < server->map->width; x++)
-            gui_send_tile(gui, server->map, (int64_t)x, (int64_t)y);
+    
     for (int i = 1; i < server->nfds; i++) {
         other = server->clients[i];
         if (other->player == NULL)
@@ -86,12 +82,36 @@ void gui_send_snapshot(server_t *server, client_t *gui)
         format_pin(msg, sizeof(msg), other);
         client_queue_send(gui, msg);
     }
+    
     for (int i = 0; i < server->eggs.count; i++) {
         snprintf(msg, sizeof(msg), "enw #%d #%d %lld %lld\n",
             server->eggs.eggs[i].id, server->eggs.eggs[i].parent_id,
             (long long)server->eggs.eggs[i].x,
             (long long)server->eggs.eggs[i].y);
         client_queue_send(gui, msg);
+    }
+
+    gui->stoped_tile = 0;
+    gui->is_tile_stoped = true;
+}
+
+void gui_pump_snapshot(server_t *server, client_t *gui)
+{
+    uint64_t total = server->map->width * server->map->height;
+
+    while (gui->is_tile_stoped && gui->send_len - gui->send_sent < CLIENT_SEND_WATERMARK) {
+        
+        // Arrete quand le nb de tile en cours d'envoie > au nb de tile totaux
+        if (gui->stoped_tile >= total) {
+            gui->is_tile_stoped = false;
+            return;
+        }
+
+        gui_send_tile(gui, server->map,
+            (int64_t)(gui->stoped_tile % server->map->width),
+            (int64_t)(gui->stoped_tile / server->map->width));
+        
+        gui->stoped_tile++;
     }
 }
 
@@ -134,8 +154,7 @@ void gui_notify_expulsion(server_t *server, client_t *client)
     gui_broadcast(server, msg);
 }
 
-void gui_notify_broadcast(server_t *server, client_t *client,
-    const char *text)
+void gui_notify_broadcast(server_t *server, client_t *client, const char *text)
 {
     char msg[600];
 
@@ -143,8 +162,7 @@ void gui_notify_broadcast(server_t *server, client_t *client,
     gui_broadcast(server, msg);
 }
 
-void gui_notify_incantation_start(server_t *server, int64_t x, int64_t y,
-    int level, const int *ids, int ids_nb)
+void gui_notify_incantation_start(server_t *server, int64_t x, int64_t y, int level, const int *ids, int ids_nb)
 {
     char msg[256];
     int len = snprintf(msg, sizeof(msg), "pic %lld %lld %d",
@@ -157,8 +175,7 @@ void gui_notify_incantation_start(server_t *server, int64_t x, int64_t y,
     gui_broadcast(server, msg);
 }
 
-void gui_notify_incantation_end(server_t *server, int64_t x, int64_t y,
-    int result)
+void gui_notify_incantation_end(server_t *server, int64_t x, int64_t y, int result)
 {
     char msg[64];
 
@@ -175,8 +192,7 @@ void gui_notify_egg_laying(server_t *server, client_t *client)
     gui_broadcast(server, msg);
 }
 
-void gui_notify_resource_take(server_t *server, client_t *client,
-    int resource)
+void gui_notify_resource_take(server_t *server, client_t *client, int resource)
 {
     char msg[32];
 
@@ -184,8 +200,7 @@ void gui_notify_resource_take(server_t *server, client_t *client,
     gui_broadcast(server, msg);
 }
 
-void gui_notify_resource_drop(server_t *server, client_t *client,
-    int resource)
+void gui_notify_resource_drop(server_t *server, client_t *client, int resource)
 {
     char msg[32];
 
@@ -201,8 +216,7 @@ void gui_notify_death(server_t *server, client_t *client)
     gui_broadcast(server, msg);
 }
 
-void gui_notify_new_egg(server_t *server, int egg_id, int parent_id,
-    int64_t x, int64_t y)
+void gui_notify_new_egg(server_t *server, int egg_id, int parent_id, int64_t x, int64_t y)
 {
     char msg[64];
 

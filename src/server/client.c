@@ -70,10 +70,24 @@ int client_extract_line(client_t *client, char *line, size_t line_size)
 int client_queue_send(client_t *client, const char *msg)
 {
     size_t msg_len = strlen(msg);
-    char *bigger = realloc(client->send_buf, client->send_len + msg_len + 1);
+    char *bigger;
+
+    if (client->send_sent > 0) {
+        memmove(client->send_buf, client->send_buf + client->send_sent, client->send_len - client->send_sent);
+        client->send_len -= client->send_sent;
+        client->send_sent = 0;
+    }
+
+    if (client->send_len + msg_len + 1 > CLIENT_MAX_SEND_BUF) {
+        client->must_disconnect = true;
+        return -1;
+    }
+
+    bigger = realloc(client->send_buf, client->send_len + msg_len + 1);
 
     if (bigger == NULL)
         return -1;
+
     client->send_buf = bigger;
     memcpy(client->send_buf + client->send_len, msg, msg_len + 1);
     client->send_len += msg_len;
