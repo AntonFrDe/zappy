@@ -8,3 +8,9 @@ zappy_bonus
 compile_commands.json
 __pycache__/
 *.pyc
+
+# IDE
+.vscode/
+
+# logs de partie (launch.sh)
+logs/

@@ -28,7 +28,11 @@ GUI_SRC		=	$(wildcard $(GUI_SRC_DIR)/*.cpp)
 GUI_OBJ		=	$(GUI_SRC:.cpp=.o)
 
 CXX		=	g++
+<<<<<<< Updated upstream
 CXXFLAGS	+=	-Wall -Wextra -I$(GUI_INC_DIR)
+=======
+CXXFLAGS	+=	-Wall -Wextra -I$(GUI_INC_DIR) -Werror
+>>>>>>> Stashed changes
 GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
 
 # ---------------------------------------------------------------------------
