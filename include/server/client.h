@@ -8,6 +8,7 @@
 
     #define CLIENT_RECV_BUF_SIZE 4096
     #define CLIENT_MAX_QUEUED_CMDS 10
+    #define CLIENT_MAX_SEND_BUF (16 * 1024 * 1024)
 
     typedef struct client_s {
         int fd;
@@ -27,6 +28,7 @@
         char *executing_cmd;    // commande en cours (possede la string)
         int incantation_owner_id; // 0 sinon id de l'initiateur qui le gele
         player_t *player;       // NULL pour le GUI
+        bool must_disconnect;
     } client_t;
 
     client_t *client_create(int fd);

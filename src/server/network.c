@@ -367,6 +367,13 @@ int server_run(server_t *server)
         if (server->fds[0].revents & POLLIN)
             accept_new_client(server);
         scheduler_tick(server);
+
+        for (int i = 1; i < server->nfds; i++) {
+            if (server->clients[i]->must_disconnect) {
+                disconnect_client(server, i);
+                i--;
+            }
+        }
     }
     drain_pending_sends(server);
     return 0;
