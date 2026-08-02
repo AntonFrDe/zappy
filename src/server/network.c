@@ -130,9 +130,12 @@ void disconnect_client(server_t *server, int client_idx)
     client_t *client = server->clients[client_idx];
     int owner_id = client->id;
 
-    if (client->handshake_done && !client->is_graphic
-        && client->player != NULL)
+
+    if (client->handshake_done && !client->is_graphic && client->player != NULL) {
         gui_notify_death(server, client);
+        server->slots_remaining[client->team_index]++;
+    }
+
     incantation_unfreeze_players(server, owner_id);
     client_destroy(client);
     for (int i = client_idx; i < server->nfds - 1; i++) {
