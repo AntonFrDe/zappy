@@ -9,6 +9,9 @@
     #define CLIENT_RECV_BUF_SIZE 4096
     #define CLIENT_MAX_QUEUED_CMDS 10
     #define CLIENT_MAX_SEND_BUF (16 * 1024 * 1024)
+// seuil de remplissage du snapshot: doit rester TRES en dessous du
+// plafond, sinon la tuile suivante fait sauter must_disconnect
+    #define CLIENT_SEND_WATERMARK (1024 * 1024)
     #define CLIENT_MAX_MAP_ONCE_READ (1024 * 1024)
 
     typedef struct client_s {

@@ -99,7 +99,7 @@ void gui_pump_snapshot(server_t *server, client_t *gui)
 {
     uint64_t total = server->map->width * server->map->height;
 
-    while (gui->is_tile_stoped && gui->send_len - gui->send_sent < CLIENT_MAX_SEND_BUF) {
+    while (gui->is_tile_stoped && gui->send_len - gui->send_sent < CLIENT_SEND_WATERMARK) {
         
         // Arrete quand le nb de tile en cours d'envoie > au nb de tile totaux
         if (gui->stoped_tile >= total) {

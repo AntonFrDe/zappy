@@ -144,14 +144,16 @@ Test(gui_protocol, snapshot_reports_map_size_team_and_every_tile)
     cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "tna team1");
 
+    // joueurs et oeufs passent AVANT les tuiles: le flot de bct est
+    // desormais etale sur plusieurs tours de boucle, un evenement vivant
+    // (ppo...) doit pouvoir arriver apres le pnw de son joueur
+    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    cr_assert_eq(strncmp(line, "enw ", 4), 0);
+
     for (int i = 0; i < 9; i++) {
         cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
         cr_assert_eq(strncmp(line, "bct ", 4), 0);
     }
-
-    // un oeuf initial par slot (clients_nb x teams_nb)
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
-    cr_assert_eq(strncmp(line, "enw ", 4), 0);
 }
 
 Test(gui_protocol, new_player_join_is_broadcast_as_pnw_and_pin)

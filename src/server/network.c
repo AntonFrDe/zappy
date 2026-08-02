@@ -352,6 +352,12 @@ int server_run(server_t *server)
     int polled_nfds;
 
     while (!server->game_over) {
+
+        // Send big map info in multiple buff
+        for (int i = 1; i < server->nfds; i++)
+            if (server->clients[i]->is_tile_stoped)
+                gui_pump_snapshot(server, server->clients[i]);
+
         update_poll_events(server);
         polled_nfds = server->nfds;
         ready = poll(server->fds, (nfds_t)polled_nfds, next_timeout(server));
