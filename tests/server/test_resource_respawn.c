@@ -48,19 +48,30 @@ Test(resource_respawn, does_not_respawn_before_twenty_time_units_elapsed)
     cr_assert_eq(sum_resource(server.map, RESOURCE_THYSTAME), before);
 }
 
+// le respawn ne double plus la population: il recomplete ce qui manque.
+// on en consomme donc avant, sinon il n'a rien a rajouter
 Test(resource_respawn, respawns_again_once_twenty_time_units_have_elapsed)
 {
     flags_t *cfg = alloc_single_team_cfg(5902, 10, 10, 1);
     server_t server;
     uint32_t before, after;
+    uint64_t tiles;
 
     cr_assert_eq(server_init(&server, cfg), 0);
     before = sum_resource(server.map, RESOURCE_THYSTAME);
     cr_assert_gt(before, (uint32_t)0);
 
+    tiles = server.map->width * server.map->height;
+    for (uint64_t i = 0; i < tiles; i++)
+        if (server.map->tiles[i].quantities[RESOURCE_THYSTAME] > 0) {
+            server.map->tiles[i].quantities[RESOURCE_THYSTAME]--;
+            break;
+        }
+    cr_assert_eq(sum_resource(server.map, RESOURCE_THYSTAME), before - 1);
+
     usleep(15000);
     scheduler_tick(&server);
     after = sum_resource(server.map, RESOURCE_THYSTAME);
 
-    cr_assert_eq(after, before * 2);
+    cr_assert_eq(after, before);
 }

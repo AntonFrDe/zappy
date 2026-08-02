@@ -530,3 +530,75 @@ Test(parser, freq_negative_fails)
     rt = parser(argc, argv);
     cr_assert_eq(rt.error, true);
 }
+
+// helper: parse une ligne complete en ne faisant varier que -x et -y
+static retour_t parse_with_map(char *width, char *height)
+{
+    char *argv[] = {
+        "zappy_server", "-p", "4242", "-x", width, "-y", height,
+        "-n", "team1", "-c", "3", "-f", "100"
+    };
+    int argc = sizeof(argv) / sizeof(argv[0]);
+
+    optind = 1;
+    return parser(argc, argv);
+}
+
+// 2^32 x 2^32 debordait uint64 vers 0, calloc(0) passait, puis
+// rand() % 0 -> SIGFPE. cf issue #150
+Test(parser, map_dimension_overflowing_uint64_is_rejected)
+{
+    retour_t rt = parse_with_map("4294967296", "4294967296");
+
+    cr_assert_eq(rt.error, true);
+    free_error(rt);
+}
+
+Test(parser, map_width_above_max_is_rejected)
+{
+    retour_t rt = parse_with_map("10001", "10");
+
+    cr_assert_eq(rt.error, true);
+    free_error(rt);
+}
+
+Test(parser, map_height_above_max_is_rejected)
+{
+    retour_t rt = parse_with_map("10", "10001");
+
+    cr_assert_eq(rt.error, true);
+    free_error(rt);
+}
+
+// la borne elle-meme doit passer, sur les deux axes
+Test(parser, map_dimension_at_max_is_accepted)
+{
+    retour_t rt = parse_with_map("10000", "10000");
+    flags_t *flags;
+
+    cr_assert_eq(rt.error, false);
+    flags = rt.value;
+    cr_assert_eq(flags->width, (uint64_t)MAP_MAX_WIDTH);
+    cr_assert_eq(flags->height, (uint64_t)MAP_MAX_HEIGHT);
+    free_flags(rt);
+}
+
+Test(parser, map_dimension_zero_is_rejected)
+{
+    retour_t rt = parse_with_map("0", "10");
+
+    cr_assert_eq(rt.error, true);
+    free_error(rt);
+    rt = parse_with_map("10", "0");
+    cr_assert_eq(rt.error, true);
+    free_error(rt);
+}
+
+// une valeur au dela de uint64 doit echouer sur ERANGE, pas boucler
+Test(parser, map_dimension_beyond_uint64_is_rejected)
+{
+    retour_t rt = parse_with_map("99999999999999999999999", "10");
+
+    cr_assert_eq(rt.error, true);
+    free_error(rt);
+}

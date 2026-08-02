@@ -289,3 +289,26 @@ Test(map, spawn_without_list_still_fills_the_map)
     cr_assert_eq(total_of(map, RESOURCE_THYSTAME), (uint32_t)5);
     map_destroy(map);
 }
+
+// map_create est publique: le parser protege le binaire, pas l'API
+Test(map, create_rejects_dimensions_above_max)
+{
+    cr_assert_null(map_create(MAP_MAX_WIDTH + 1, 10));
+    cr_assert_null(map_create(10, MAP_MAX_HEIGHT + 1));
+}
+
+// largeur 0 -> calloc(0) reussit, puis secure_mod divise par zero
+Test(map, create_rejects_zero_dimensions)
+{
+    cr_assert_null(map_create(0, 10));
+    cr_assert_null(map_create(10, 0));
+}
+
+Test(map, create_accepts_the_max_itself)
+{
+    map_t *map = map_create(MAP_MAX_WIDTH, 1);
+
+    cr_assert_not_null(map);
+    cr_assert_eq(map->width, (uint64_t)MAP_MAX_WIDTH);
+    map_destroy(map);
+}

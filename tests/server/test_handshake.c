@@ -143,11 +143,13 @@ Test(handshake, graphic_gets_client_num_zero_and_map_size)
 
     cr_assert_eq(write(sock, "GRAPHIC\n", 8), 8);
 
+    // un GRAPHIC ne consomme pas de slot: pas de CLIENT-NUM ni de "W H",
+    // le snapshot commence directement par msz
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
-    cr_assert_str_eq(line, "0");
+    cr_assert_str_eq(line, "msz 15 20");
 
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
-    cr_assert_str_eq(line, "15 20");
+    cr_assert_eq(strncmp(line, "sgt ", 4), 0);
 
     close(sock);
 }
