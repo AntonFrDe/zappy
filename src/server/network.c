@@ -272,6 +272,54 @@ static void drain_pending_sends(server_t *server)
     }
 }
 
+static int ms_until(struct timespec deadline)
+{
+    struct timespec now;
+    long long ns;
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    ns = (long long)(deadline.tv_sec - now.tv_sec) * 1000000000LL + (deadline.tv_nsec - now.tv_nsec);
+
+    if (ns <= 0)
+        return 0;
+
+    return (int)((ns + 999999LL) / 1000000LL);
+}
+
+// Ajuste le temps de to au minimum
+static int next_timeout(server_t *server)
+{
+    int best = ms_until(server->next_resource_spawn);
+    client_t *client;
+    int ms;
+
+    for (int i = 1; i < server->nfds; i++) {
+        client = server->clients[i];
+
+        // ms de base normale
+        if (client->is_graphic || !client->handshake_done || client->player == NULL)
+            continue;
+
+        ms = ms_until(client->player->next_food_tick);
+
+        // Modif de temps de chargement en accors avec le ms le plus petit
+        if (ms < best)
+            best = ms;
+
+        // gele par une incantation, scheduler_tick le saute: renvoyer 0
+        if (client->incantation_owner_id != 0 && client->incantation_owner_id != client->id)
+            continue;
+
+        if (client->busy) {
+            ms = ms_until(client->ready_at);
+            if (ms < best)
+                best = ms;
+        } else if (client->cmd_count > 0) {return 0;}
+    }
+
+    return best;
+}
+
 // Boucle server
 int server_run(server_t *server)
 {
@@ -281,7 +329,7 @@ int server_run(server_t *server)
     while (!server->game_over) {
         update_poll_events(server);
         polled_nfds = server->nfds;
-        ready = poll(server->fds, (nfds_t)polled_nfds, 100);
+        ready = poll(server->fds, (nfds_t)polled_nfds, next_timeout(server));
 
         if (ready < 0 && errno == EINTR)
             continue;
@@ -298,3 +346,4 @@ int server_run(server_t *server)
     drain_pending_sends(server);
     return 0;
 }
+

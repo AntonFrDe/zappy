@@ -9,19 +9,12 @@ typedef struct {
 
 static const elevation_req_t REQUIREMENTS[8] = {
     [1] = {1, { [RESOURCE_LINEMATE] = 1 }},
-    [2] = {2, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 1,
-        [RESOURCE_SIBUR] = 1 }},
-    [3] = {2, { [RESOURCE_LINEMATE] = 2, [RESOURCE_SIBUR] = 1,
-        [RESOURCE_PHIRAS] = 2 }},
-    [4] = {4, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 1,
-        [RESOURCE_SIBUR] = 2, [RESOURCE_PHIRAS] = 1 }},
-    [5] = {4, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 2,
-        [RESOURCE_SIBUR] = 1, [RESOURCE_MENDIANE] = 3 }},
-    [6] = {6, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 2,
-        [RESOURCE_SIBUR] = 3, [RESOURCE_PHIRAS] = 1 }},
-    [7] = {6, { [RESOURCE_LINEMATE] = 2, [RESOURCE_DERAUMERE] = 2,
-        [RESOURCE_SIBUR] = 2, [RESOURCE_MENDIANE] = 2, [RESOURCE_PHIRAS] = 2,
-        [RESOURCE_THYSTAME] = 1 }},
+    [2] = {2, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 1, [RESOURCE_SIBUR] = 1 }},
+    [3] = {2, { [RESOURCE_LINEMATE] = 2, [RESOURCE_SIBUR] = 1, [RESOURCE_PHIRAS] = 2 }},
+    [4] = {4, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 1, [RESOURCE_SIBUR] = 2, [RESOURCE_PHIRAS] = 1 }},
+    [5] = {4, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 2, [RESOURCE_SIBUR] = 1, [RESOURCE_MENDIANE] = 3 }},
+    [6] = {6, { [RESOURCE_LINEMATE] = 1, [RESOURCE_DERAUMERE] = 2, [RESOURCE_SIBUR] = 3, [RESOURCE_PHIRAS] = 1 }},
+    [7] = {6, { [RESOURCE_LINEMATE] = 2, [RESOURCE_DERAUMERE] = 2, [RESOURCE_SIBUR] = 2, [RESOURCE_MENDIANE] = 2, [RESOURCE_PHIRAS] = 2, [RESOURCE_THYSTAME] = 1 }},
 };
 
 static bool same_spot_same_level(player_t *a, player_t *b)
@@ -153,6 +146,7 @@ void command_incantation(server_t *server, client_t *client, const char *arg)
     tile = map_get_tile(server->map, x, y);
     for (int r = 0; r < RESOURCE_COUNT; r++)
         tile->quantities[r] -= req->stones[r];
+    gui_notify_tile(server, x, y);
     elevate_players_on_tile(server, client);
     gui_notify_incantation_end(server, x, y, 1);
     incantation_unfreeze_players(server, client->id);
