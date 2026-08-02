@@ -2,6 +2,10 @@
     #define MAP_H_
     #include <stdint.h>
 
+    // Map max taille
+    #define MAP_MAX_WIDTH  10000
+    #define MAP_MAX_HEIGHT 10000
+
 // ordre aligne sur le protocole gui (bct X Y q0 q1 q2 q3 q4 q5 q6)
     typedef enum {
         RESOURCE_FOOD = 0,
