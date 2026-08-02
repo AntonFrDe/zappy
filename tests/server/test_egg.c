@@ -35,6 +35,23 @@ static flags_t *alloc_single_team_cfg(int port, uint64_t width,
     return cfg;
 }
 
+static flags_t *alloc_multi_team_cfg(int port, uint16_t teams_nb,
+    uint16_t clients_nb)
+{
+    static char *const NAMES[] = {"team1", "team2", "team3"};
+    char **teams = malloc(sizeof(char *) * teams_nb);
+    flags_t *cfg = malloc(sizeof(flags_t));
+
+    for (int i = 0; i < teams_nb; i++)
+        teams[i] = NAMES[i];
+    *cfg = (flags_t){
+        .port = port, .width = 10, .height = 10,
+        .teams = teams, .teams_nb = teams_nb, .clients_nb = clients_nb,
+        .freq = 1000
+    };
+    return cfg;
+}
+
 static server_t *start_test_server(flags_t *cfg, pthread_t *thread)
 {
     server_t *server = malloc(sizeof(server_t));
@@ -91,17 +108,20 @@ Test(egg, fork_adds_one_egg_for_the_team)
     server_t *server;
     int sock;
     char line[256];
+    int before;
 
     server = start_test_server(cfg, &thread);
     sock = connect_to_server(cfg->port);
     do_handshake(sock, line, sizeof(line));
 
-    cr_assert_eq(server->eggs.count, 0);
+    // depuis les oeufs initiaux la liste n'est plus vide au depart, on
+    // compte donc le delta et pas la valeur absolue
+    before = server->eggs.count;
     cr_assert_eq(write(sock, "Fork\n", 5), 5);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
-    cr_assert_eq(server->eggs.count, 1);
-    cr_assert_eq(server->eggs.eggs[0].team_index, 0);
+    cr_assert_eq(server->eggs.count, before + 1);
+    cr_assert_eq(server->eggs.eggs[server->eggs.count - 1].team_index, 0);
 }
 
 Test(egg, new_connection_hatches_at_forked_egg_position)
@@ -118,6 +138,10 @@ Test(egg, new_connection_hatches_at_forked_egg_position)
 
     server->clients[1]->player->x = 7;
     server->clients[1]->player->y = 8;
+
+    // on jette les oeufs initiaux: sinon pop_random pourrait piocher l'un
+    // d'eux au lieu de celui du Fork, et le test devient aleatoire
+    server->eggs.count = 0;
 
     cr_assert_eq(write(sock1, "Fork\n", 5), 5);
     cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
@@ -158,4 +182,87 @@ Test(egg, eject_destroys_eggs_sharing_the_tile)
     cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
     cr_assert_eq(server->eggs.count, 0);
+}
+
+// un slot = un oeuf: clients_nb x teams_nb au demarrage
+Test(egg, server_init_creates_one_egg_per_slot)
+{
+    server_t server;
+    flags_t *cfg = alloc_multi_team_cfg(5611, 3, 4);
+
+    cr_assert_eq(server_init(&server, cfg), 0);
+    cr_assert_eq(server.eggs.count, 12);
+    server_destroy(&server);
+}
+
+Test(egg, initial_eggs_are_split_evenly_between_teams)
+{
+    server_t server;
+    flags_t *cfg = alloc_multi_team_cfg(5612, 2, 5);
+    int per_team[2] = {0, 0};
+
+    cr_assert_eq(server_init(&server, cfg), 0);
+    for (int i = 0; i < server.eggs.count; i++)
+        per_team[server.eggs.eggs[i].team_index]++;
+    cr_assert_eq(per_team[0], 5);
+    cr_assert_eq(per_team[1], 5);
+    server_destroy(&server);
+}
+
+// positions dans les bornes de la carte, et personne ne les a pondus
+Test(egg, initial_eggs_are_inside_the_map_and_have_no_parent)
+{
+    server_t server;
+    flags_t *cfg = alloc_multi_team_cfg(5613, 2, 3);
+
+    cr_assert_eq(server_init(&server, cfg), 0);
+    for (int i = 0; i < server.eggs.count; i++) {
+        cr_assert_geq(server.eggs.eggs[i].x, (int64_t)0);
+        cr_assert_lt(server.eggs.eggs[i].x, (int64_t)10);
+        cr_assert_geq(server.eggs.eggs[i].y, (int64_t)0);
+        cr_assert_lt(server.eggs.eggs[i].y, (int64_t)10);
+        cr_assert_eq(server.eggs.eggs[i].parent_id, INITIAL_EGG_PARENT);
+    }
+    server_destroy(&server);
+}
+
+// next_egg_id doit etre mis a 1 avant la creation, sinon les ids partent de 0
+Test(egg, initial_egg_ids_start_at_one)
+{
+    server_t server;
+    flags_t *cfg = alloc_multi_team_cfg(5614, 1, 3);
+
+    cr_assert_eq(server_init(&server, cfg), 0);
+    cr_assert_eq(server.eggs.eggs[0].id, 1);
+    server_destroy(&server);
+}
+
+// un joueur qui rejoint eclot sur un oeuf, plus a une position au hasard
+Test(egg, first_player_hatches_from_an_initial_egg)
+{
+    flags_t *cfg = alloc_single_team_cfg(5615, 20, 20, 3);
+    pthread_t thread;
+    server_t *server;
+    int sock;
+    char line[256];
+    int64_t ex[8];
+    int64_t ey[8];
+    int nb;
+    bool found = false;
+
+    server = start_test_server(cfg, &thread);
+    nb = server->eggs.count;
+    cr_assert_eq(nb, 3);
+    for (int i = 0; i < nb; i++) {
+        ex[i] = server->eggs.eggs[i].x;
+        ey[i] = server->eggs.eggs[i].y;
+    }
+    sock = connect_to_server(cfg->port);
+    do_handshake(sock, line, sizeof(line));
+    cr_assert_eq(server->eggs.count, nb - 1);
+    for (int i = 0; i < nb; i++)
+        if (server->clients[1]->player->x == ex[i]
+            && server->clients[1]->player->y == ey[i])
+            found = true;
+    cr_assert(found, "le joueur n'a pas eclos sur un oeuf initial");
 }
