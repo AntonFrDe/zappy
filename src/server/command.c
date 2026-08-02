@@ -146,6 +146,7 @@ static bool check_food(server_t *server, int idx)
         return true;
     }
     player->inventory[RESOURCE_FOOD]--;
+    gui_notify_inventory(server, client);
     player->next_food_tick = compute_ready_at(126, server->cfg->freq);
     return false;
 }
