@@ -19,8 +19,9 @@ map_t *map_create(uint64_t width, uint64_t height)
 {
     map_t *map = malloc(sizeof(map_t));
 
-    if (map == NULL)
+    if (map == NULL || width > MAP_MAX_WIDTH || height > MAP_MAX_HEIGHT)
         return NULL;
+        
     map->width = width;
     map->height = height;
     map->tiles = calloc((size_t)(width * height), sizeof(tile_t));

@@ -6,7 +6,7 @@
 /*   By: anton <anton@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/07 17:45:47 by anton             #+#    #+#             */
-/*   Updated: 2026/08/02 13:01:34 by anton            ###   ########.fr       */
+/*   Updated: 2026/08/02 13:11:13 by anton            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -98,18 +98,18 @@ retour_t parser(int argc, char **argv)
         case 'x': {
             switch (parse_u64_nb(optarg, MAP_MAX_WIDTH, &flags.width)) {
                 case -1: return fail("Map width given value is not a unsigned integer", flags.teams);
-                case -2: return fail("Map width given value is greater than")
+                case -2: return fail(strcat("Map width given value is greater than", atoi(MAP_MAX_WIDTH)), flags.teams);
+                default: has_width = true;
             }
-            if (!parse_u64_nb(optarg, MAP_MAX_WIDTH, &flags.width))
-                return fail("Map width given value is not a unsigned integer", flags.teams);
-            has_width = true;
             break;
         }
         // MAP HEIGHT
         case 'y': {
-            if (!parse_u64_nb(optarg, MAP_MAX_HEIGHT, &flags.height))
-                return fail("Map height given value is not a unsigned integer", flags.teams);
-            has_height = true;
+            switch (parse_u64_nb(optarg, MAP_MAX_HEIGHT, &flags.height)) {
+                case -1: return fail("Map height given value is not a unsigned integer", flags.teams);
+                case -2: return fail(strcat("Map height given value is greater than", atoi(MAP_MAX_HEIGHT)), flags.teams);
+                default: has_height = true;
+            }
             break;
         }
         // TEAM NAMES
