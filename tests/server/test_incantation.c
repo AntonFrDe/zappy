@@ -189,3 +189,46 @@ Test(incantation, elevates_other_participant_sharing_the_tile)
     cr_assert_eq(server->clients[1]->player->level, 2);
     cr_assert_eq(server->clients[2]->player->level, 2);
 }
+
+// le check a lieu au debut ET a la fin (cf sujet). si les pierres
+// disparaissent entre les deux, TOUS les participants doivent recevoir ko,
+// pas seulement celui qui a lance: les autres ont recu "Elevation
+// underway" et attendent une reponse
+Test(incantation, failed_incantation_notifies_every_participant)
+{
+    flags_t *cfg = alloc_single_team_cfg(5405, 10, 10, 2);
+    pthread_t thread;
+    server_t *server;
+    int sock1, sock2;
+    char line[256];
+    tile_t *tile;
+
+    server = start_test_server(cfg, &thread);
+    sock1 = connect_to_server(cfg->port);
+    do_handshake(sock1, line, sizeof(line));
+    sock2 = connect_to_server(cfg->port);
+    do_handshake(sock2, line, sizeof(line));
+
+    server->clients[1]->player->x = 4;
+    server->clients[1]->player->y = 4;
+    server->clients[2]->player->x = 4;
+    server->clients[2]->player->y = 4;
+    tile = map_get_tile(server->map, 4, 4);
+    tile->quantities[RESOURCE_LINEMATE] = 1;
+
+    cr_assert_eq(write(sock1, "Incantation\n", 12), 12);
+    cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
+    cr_assert_str_eq(line, "Elevation underway");
+    cr_assert_eq(read_line(sock2, line, sizeof(line)), 0);
+    cr_assert_str_eq(line, "Elevation underway");
+
+    // pendant les 300/1000 = 0.3s du rituel, la pierre est ramassee
+    tile->quantities[RESOURCE_LINEMATE] = 0;
+
+    cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
+    cr_assert_str_eq(line, "ko");
+    cr_assert_eq(read_line(sock2, line, sizeof(line)), 0);
+    cr_assert_str_eq(line, "ko");
+    cr_assert_eq(server->clients[1]->player->level, 1);
+    cr_assert_eq(server->clients[2]->player->level, 1);
+}
