@@ -3,6 +3,7 @@
 #include "../../include/server/commands.h"
 #include "../../include/server/gui_protocol.h"
 #include "../../include/server/gui_requests.h"
+#include "../../include/server/egg.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -33,6 +34,22 @@ static int create_listen_socket(int port)
         return -1;
     }
     return fd;
+}
+
+static void create_initial_eggs(server_t *server)
+{
+    flags_t *cfg = server->cfg;
+    int64_t x;
+    int64_t y;
+
+    for (int team = 0; team < cfg->teams_nb; team++)
+        for (int n = 0; n < cfg->clients_nb; n++) {
+
+            // Fait spawn un oeuf par client et teams a des endroit random
+            x = (int64_t)((uint64_t)rand() % cfg->width);
+            y = (int64_t)((uint64_t)rand() % cfg->height);
+            egg_list_add(&server->eggs, &server->next_egg_id, team, INITIAL_EGG_PARENT, x, y);
+        }
 }
 
 int server_init(server_t *server, flags_t *cfg)
@@ -66,6 +83,9 @@ int server_init(server_t *server, flags_t *cfg)
     server->fds[0].fd = server->listen_fd;
     server->fds[0].events = POLLIN;
     server->nfds = 1;
+
+    // Creation des oeufs au start
+    create_initial_eggs(server);
     return 0;
 }
 
@@ -175,6 +195,8 @@ static bool handle_team_name(server_t *server, client_t *client,
     server->slots_remaining[team_i]--;
     client->team_index = team_i;
     client->handshake_done = true;
+
+    // Prend un oeuf au demarrage
     if (egg_list_pop_random(&server->eggs, team_i, &egg_x, &egg_y, &egg_id))
         client->player = player_create_at(egg_x, egg_y);
     else

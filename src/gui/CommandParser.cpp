@@ -410,7 +410,8 @@ void CommandParser::handlePie(std::istringstream &args)
         rit->active = false;
         rit->result = result ? 1 : 0;
 
-        if (result && rit->level >= 1 && rit->level <= 7)
+        if (result && rit->level >= 1 && rit->level <= 7
+            && isInMapBounds(x, y))
         {
             Tile &tile = _state.tileAt(x, y);
             const int *cost = kElevationCost[rit->level - 1];
