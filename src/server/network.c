@@ -40,7 +40,7 @@ static void create_initial_eggs(server_t *server)
 {
     flags_t *cfg = server->cfg;
     int64_t x;
-    int16_t y;
+    int64_t y;
 
     for (int team = 0; team < cfg->teams_nb; team++)
         for (int n = 0; n < cfg->clients_nb; n++) {
@@ -85,9 +85,6 @@ int server_init(server_t *server, flags_t *cfg)
     server->nfds = 1;
 
     // Creation des oeufs au start
-    egg_list_init(&server->eggs);
-    server->next_client_id = 1;
-    server->next_client_id = 1;
     create_initial_eggs(server);
     return 0;
 }
