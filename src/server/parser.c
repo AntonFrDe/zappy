@@ -6,7 +6,7 @@
 /*   By: anton <anton@student.42.fr>                +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/07 17:45:47 by anton             #+#    #+#             */
-/*   Updated: 2026/08/02 13:11:13 by anton            ###   ########.fr       */
+/*   Updated: 2026/08/02 13:26:24 by anton            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,8 +45,10 @@ static bool parse_long_nb(const char *str, long min, long max, long *out)
     return true;
 }
 
-// la mm en unsigned
-static uint8_t parse_u64_nb(const char *str, uint64_t max, uint64_t *out)
+// la mm en unsigned. -1 = pas un entier, -2 = hors bornes, 1 = ok
+// (int et pas uint8_t: sur un type non signe -1 vaut 255 et aucun case
+// du switch appelant ne matcherait)
+static int parse_u64_nb(const char *str, uint64_t max, uint64_t *out)
 {
     char *end;
     unsigned long long val;
@@ -56,7 +58,9 @@ static uint8_t parse_u64_nb(const char *str, uint64_t max, uint64_t *out)
     errno = 0;
     val = strtoull(str, &end, 10);
 
-    if (*end != '\0' || errno == ERANGE || val < 1 || val > max)
+    if (*end != '\0')
+        return -1;
+    if (errno == ERANGE || val < 1 || val > max)
         return -2;
         
     *out = (uint64_t)val;
@@ -96,18 +100,30 @@ retour_t parser(int argc, char **argv)
         }
         // MAP WIDTH
         case 'x': {
+            char msg[128];
+
             switch (parse_u64_nb(optarg, MAP_MAX_WIDTH, &flags.width)) {
                 case -1: return fail("Map width given value is not a unsigned integer", flags.teams);
-                case -2: return fail(strcat("Map width given value is greater than", atoi(MAP_MAX_WIDTH)), flags.teams);
+                
+                case -2:
+                    snprintf(msg, sizeof(msg),"Map width given value is not between 1 and %d", MAP_MAX_WIDTH);
+                    return fail(msg, flags.teams);
+                
                 default: has_width = true;
             }
             break;
         }
         // MAP HEIGHT
         case 'y': {
+            char msg[128];
+
             switch (parse_u64_nb(optarg, MAP_MAX_HEIGHT, &flags.height)) {
                 case -1: return fail("Map height given value is not a unsigned integer", flags.teams);
-                case -2: return fail(strcat("Map height given value is greater than", atoi(MAP_MAX_HEIGHT)), flags.teams);
+                
+                case -2:
+                    snprintf(msg, sizeof(msg), "Map height given value is not between 1 and %d", MAP_MAX_HEIGHT);
+                    return fail(msg, flags.teams);
+                
                 default: has_height = true;
             }
             break;

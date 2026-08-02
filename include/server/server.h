@@ -11,9 +11,7 @@
     #include "commands.h"
     #include <stdlib.h>
     #include <stdio.h>
-
-    #define MAP_MAX_WIDTH  10000
-    #define MAP_MAX_HEIGHT 10000
+    
     retour_t parser(int argc, char **argv);
 
 #endif /* !SERVER_H_ */

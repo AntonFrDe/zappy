@@ -17,11 +17,15 @@ static const double RESOURCE_DENSITY[RESOURCE_COUNT] = {
 
 map_t *map_create(uint64_t width, uint64_t height)
 {
-    map_t *map = malloc(sizeof(map_t));
+    map_t *map;
 
-    if (map == NULL || width > MAP_MAX_WIDTH || height > MAP_MAX_HEIGHT)
+    if (width < 1 || width > MAP_MAX_WIDTH || height < 1 || height > MAP_MAX_HEIGHT)
         return NULL;
-        
+
+    map = malloc(sizeof(map_t));
+
+    if (map == NULL)
+        return NULL;
     map->width = width;
     map->height = height;
     map->tiles = calloc((size_t)(width * height), sizeof(tile_t));
