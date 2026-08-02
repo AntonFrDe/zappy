@@ -85,35 +85,44 @@ static void do_handshake(int sock, char *line, size_t line_size)
     cr_assert_eq(read_line(sock, line, line_size), 0);
 }
 
+// un GRAPHIC ne recoit plus CLIENT-NUM ni "W H": le snapshot commence
+// directement par msz (cf gui_send_snapshot)
 static int connect_graphic(int port, char *line, size_t line_size)
 {
     int sock = connect_to_server(port);
 
     cr_assert_eq(read_line(sock, line, line_size), 0);
+    cr_assert_str_eq(line, "WELCOME");
     cr_assert_eq(write(sock, "GRAPHIC\n", 8), 8);
-    cr_assert_eq(read_line(sock, line, line_size), 0);
-    cr_assert_str_eq(line, "0");
-    cr_assert_eq(read_line(sock, line, line_size), 0);
     return sock;
 }
 
-static void drain_lines(int sock, int n, char *line, size_t line_size)
+// lit jusqu'a une ligne commencant par prefix. le serveur intercale des
+// bct (respawn periodique, pierres consommees par une incantation) qu'on
+// ne veut pas compter: chaque test verifie l'evenement qui l'interesse.
+// compter les lignes une par une rendait ces tests faux des qu'on ajoutait
+// une ligne au snapshot (sgt, puis enw des oeufs initiaux)
+static void read_until(int sock, const char *prefix, char *line,
+    size_t line_size)
 {
-    for (int i = 0; i < n; i++)
+    size_t len = strlen(prefix);
+
+    for (int i = 0; i < 2048; i++) {
         cr_assert_eq(read_line(sock, line, line_size), 0);
+        if (strncmp(line, prefix, len) == 0)
+            return;
+    }
+    cr_assert_fail("ligne commencant par '%s' jamais recue", prefix);
 }
 
-// connecte un GRAPHIC et saute son snapshot (msz, tna, bct*width*height,
-// puis pnw+pin pour chaque joueur deja connecte)
+// connecte un GRAPHIC apres des joueurs; le snapshot est saute par les
+// read_until de chaque test, on rend juste la socket
 static int connect_graphic_after_players(flags_t *cfg, int players_nb)
 {
     char line[256];
-    int gsock = connect_graphic(cfg->port, line, sizeof(line));
 
-    drain_lines(gsock, 1 + cfg->teams_nb
-        + (int)(cfg->width * cfg->height) + players_nb * 2, line,
-        sizeof(line));
-    return gsock;
+    (void)players_nb;
+    return connect_graphic(cfg->port, line, sizeof(line));
 }
 
 Test(gui_protocol, snapshot_reports_map_size_team_and_every_tile)
@@ -130,12 +139,19 @@ Test(gui_protocol, snapshot_reports_map_size_team_and_every_tile)
     cr_assert_str_eq(line, "msz 3 3");
 
     cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    cr_assert_str_eq(line, "sgt 1000");
+
+    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "tna team1");
 
     for (int i = 0; i < 9; i++) {
         cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
         cr_assert_eq(strncmp(line, "bct ", 4), 0);
     }
+
+    // un oeuf initial par slot (clients_nb x teams_nb)
+    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    cr_assert_eq(strncmp(line, "enw ", 4), 0);
 }
 
 Test(gui_protocol, new_player_join_is_broadcast_as_pnw_and_pin)
@@ -150,12 +166,11 @@ Test(gui_protocol, new_player_join_is_broadcast_as_pnw_and_pin)
 
     start_test_server(cfg, &thread);
     gsock = connect_graphic(cfg->port, line, sizeof(line));
-    drain_lines(gsock, 1 + 1 + 9, line, sizeof(line));
 
     sock = connect_to_server(cfg->port);
     do_handshake(sock, line, sizeof(line));
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pnw ", line, sizeof(line));
     cr_assert_eq(sscanf(line, "pnw #%d %d %d %d %d %31s",
         &id, &x, &y, &o, &level, team), 6);
     cr_assert_eq(id, 2);
@@ -165,7 +180,7 @@ Test(gui_protocol, new_player_join_is_broadcast_as_pnw_and_pin)
     cr_assert(x >= 0 && x < 3);
     cr_assert(y >= 0 && y < 3);
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pin ", line, sizeof(line));
     cr_assert_eq(sscanf(line, "pin #%d %d %d %d %d %d %d %d %d %d",
         &id, &x, &y, &q[0], &q[1], &q[2], &q[3], &q[4], &q[5], &q[6]), 10);
     cr_assert_eq(id, 2);
@@ -194,7 +209,7 @@ Test(gui_protocol, forward_is_broadcast_as_ppo)
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "ppo ", line, sizeof(line));
     cr_assert_str_eq(line, "ppo #1 1 0 1");
 }
 
@@ -218,13 +233,13 @@ Test(gui_protocol, take_and_set_are_broadcast_as_pgt_and_pdr)
     cr_assert_eq(write(sock, "Take linemate\n", 14), 14);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pgt ", line, sizeof(line));
     cr_assert_str_eq(line, "pgt #1 1");
 
     cr_assert_eq(write(sock, "Set linemate\n", 13), 13);
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pdr ", line, sizeof(line));
     cr_assert_str_eq(line, "pdr #1 1");
 }
 
@@ -241,7 +256,7 @@ Test(gui_protocol, broadcast_is_relayed_as_pbc)
     gsock = connect_graphic_after_players(cfg, 1);
 
     cr_assert_eq(write(sock, "Broadcast hello\n", 16), 16);
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pbc ", line, sizeof(line));
     cr_assert_str_eq(line, "pbc #1 hello");
 }
 
@@ -252,8 +267,9 @@ Test(gui_protocol, fork_is_broadcast_as_pfk_and_enw)
     server_t *server;
     int gsock, sock;
     char line[256];
-    char expected[64];
     int64_t px, py;
+    int egg_id, parent;
+    long long ex, ey;
 
     server = start_test_server(cfg, &thread);
     sock = connect_to_server(cfg->port);
@@ -266,13 +282,17 @@ Test(gui_protocol, fork_is_broadcast_as_pfk_and_enw)
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pfk ", line, sizeof(line));
     cr_assert_str_eq(line, "pfk #1");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
-    snprintf(expected, sizeof(expected), "enw #1 #1 %lld %lld",
-        (long long)px, (long long)py);
-    cr_assert_str_eq(line, expected);
+    // l'id depend des oeufs initiaux deja distribues, on verifie le
+    // parent et la position
+    read_until(gsock, "enw ", line, sizeof(line));
+    cr_assert_eq(sscanf(line, "enw #%d #%d %lld %lld", &egg_id, &parent,
+        &ex, &ey), 4);
+    cr_assert_eq(parent, 1);
+    cr_assert_eq(ex, (long long)px);
+    cr_assert_eq(ey, (long long)py);
 }
 
 Test(gui_protocol, eject_is_broadcast_as_pex_ppo_and_edi)
@@ -282,6 +302,8 @@ Test(gui_protocol, eject_is_broadcast_as_pex_ppo_and_edi)
     server_t *server;
     int gsock, sock1, sock2;
     char line[256];
+    char expected[64];
+    int egg_id;
 
     server = start_test_server(cfg, &thread);
     sock1 = connect_to_server(cfg->port);
@@ -298,7 +320,9 @@ Test(gui_protocol, eject_is_broadcast_as_pex_ppo_and_edi)
     cr_assert_eq(write(sock1, "Fork\n", 5), 5);
     cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "ok");
-    drain_lines(gsock, 2, line, sizeof(line));
+    read_until(gsock, "pfk ", line, sizeof(line));
+    read_until(gsock, "enw ", line, sizeof(line));
+    cr_assert_eq(sscanf(line, "enw #%d", &egg_id), 1);
 
     cr_assert_eq(write(sock1, "Eject\n", 6), 6);
     cr_assert_eq(read_line(sock1, line, sizeof(line)), 0);
@@ -306,12 +330,13 @@ Test(gui_protocol, eject_is_broadcast_as_pex_ppo_and_edi)
     cr_assert_eq(read_line(sock2, line, sizeof(line)), 0);
     cr_assert_eq(strncmp(line, "eject: ", 7), 0);
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pex ", line, sizeof(line));
     cr_assert_str_eq(line, "pex #2");
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "ppo ", line, sizeof(line));
     cr_assert_eq(strncmp(line, "ppo #2 ", 7), 0);
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
-    cr_assert_str_eq(line, "edi #1");
+    read_until(gsock, "edi ", line, sizeof(line));
+    snprintf(expected, sizeof(expected), "edi #%d", egg_id);
+    cr_assert_str_eq(line, expected);
 }
 
 Test(gui_protocol, incantation_is_broadcast_as_pic_then_pie)
@@ -338,7 +363,7 @@ Test(gui_protocol, incantation_is_broadcast_as_pic_then_pie)
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "Elevation underway");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pic ", line, sizeof(line));
     snprintf(expected, sizeof(expected), "pic %lld %lld 1 #1",
         (long long)px, (long long)py);
     cr_assert_str_eq(line, expected);
@@ -346,10 +371,11 @@ Test(gui_protocol, incantation_is_broadcast_as_pic_then_pie)
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "Current level: 2");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    // un bct s'intercale ici depuis #24: les pierres consommees
+    read_until(gsock, "plv ", line, sizeof(line));
     cr_assert_str_eq(line, "plv #1 2");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pie ", line, sizeof(line));
     snprintf(expected, sizeof(expected), "pie %lld %lld 1",
         (long long)px, (long long)py);
     cr_assert_str_eq(line, expected);
@@ -372,6 +398,6 @@ Test(gui_protocol, starvation_death_is_broadcast_as_pdi)
     cr_assert_eq(read_line(sock, line, sizeof(line)), 0);
     cr_assert_str_eq(line, "dead");
 
-    cr_assert_eq(read_line(gsock, line, sizeof(line)), 0);
+    read_until(gsock, "pdi ", line, sizeof(line));
     cr_assert_str_eq(line, "pdi #1");
 }
