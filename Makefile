@@ -16,7 +16,7 @@ SERVER_SRC	=	$(wildcard $(SERVER_SRC_DIR)/*.c) $(wildcard $(SERVER_SRC_DIR)/comm
 SERVER_OBJ	=	$(SERVER_SRC:.c=.o)
 
 CC		=	gcc
-CFLAGS		+=	-Wall -Wextra -I$(SERVER_INC_DIR) -Werror
+CFLAGS	+=	-Wall -Wextra -I$(SERVER_INC_DIR) -Werror
 
 # ---------------------------------------------------------------------------
 # GUI (C++)
@@ -28,7 +28,7 @@ GUI_SRC		=	$(wildcard $(GUI_SRC_DIR)/*.cpp)
 GUI_OBJ		=	$(GUI_SRC:.cpp=.o)
 
 CXX		=	g++
-CXXFLAGS	+=	-Wall -Wextra -I$(GUI_INC_DIR) - Werror
+CXXFLAGS	+=	-Wall -Wextra -I$(GUI_INC_DIR) -Werror
 GUI_LDLIBS	=	-lsfml-graphics -lsfml-window -lsfml-system
 
 # ---------------------------------------------------------------------------
